@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>패스오더 · 편지 신청</title>
+<meta property="og:title" content="패스오더 · 편지 신청">
+<meta property="og:description" content="다음에 들르실 때, 사장님께 편지 한 통을 건네 주시겠어요?">
+<meta name="robots" content="noindex">
+<script src="config.js"></script>
+<script src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
+<link rel="stylesheet" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<style>
+:root{--or:#F26B1D;--or2:#C4541A;--ink:#1F1B16;--ink2:#5B554E;--ink3:#8B857E;--line:#ECE3DA;--bg:#FBF8F4;--tint:#FFF1E8;--soft:#F6F3EF}
+*{box-sizing:border-box}
+html,body{margin:0;background:#E9E4DD;color:var(--ink);font-family:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:420px;margin:0 auto;background:var(--bg);min-height:100vh;position:relative}
+.nav{height:50px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+.nav i{position:absolute;left:16px;font-style:normal;font-size:24px;font-weight:400;top:9px;color:var(--ink2);cursor:pointer}
+.nav .pg{position:absolute;right:16px;font-size:12.5px;color:var(--ink3)}.nav .pg b{color:var(--or)}
+.pad{padding:0 20px 130px}
+.h1{font-size:25px;font-weight:800;line-height:1.3;letter-spacing:-.5px;margin:22px 0 10px}.h1 em{font-style:normal;color:var(--or)}
+.lead{font-size:14.5px;color:var(--ink2);line-height:1.6;margin:0 0 14px}.lead b{color:var(--ink)}
+.chip{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px;font-size:14px;line-height:1.45}
+.chip .ic{width:32px;height:32px;border-radius:50%;background:var(--tint);color:var(--or2);font-weight:800;display:flex;align-items:center;justify-content:center;flex:0 0 32px}
+.chip b{color:var(--or)}
+.sech{display:flex;align-items:center;gap:8px;margin:30px 0 10px}
+.sech span{font-size:12px;font-weight:800;color:#fff;background:var(--or);border-radius:6px;padding:3px 8px}
+.sech b{font-size:19px;font-weight:800;letter-spacing:-.3px}
+.cond{font-size:14.5px;font-weight:700;line-height:1.5;margin:0 0 10px}
+.two{display:flex;gap:8px}
+.two .c{flex:1;border-radius:14px;padding:13px 12px 12px;background:var(--soft)}
+.two .c.hi{background:var(--tint)}
+.two .c small{display:block;font-size:11px;color:var(--ink3);font-weight:700}
+.two .c .v{font-size:21px;font-weight:800;margin:3px 0 2px;letter-spacing:-.4px}.two .c.hi .v{color:var(--or)}
+.two .c span{display:block;font-size:11.5px;color:var(--ink2);line-height:1.45}
+.sub{font-size:12.5px;color:var(--ink3);line-height:1.5;margin-top:8px}
+.tix{position:relative;margin-top:6px}
+.nm1{margin-top:18px;font-size:14px;color:var(--ink2);background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}.nm1 b{color:var(--ink)}.nm1 a{margin-left:auto;font-size:12.5px;color:var(--or2);font-weight:700;text-decoration:underline;cursor:pointer}
+.gift{display:flex;gap:10px;align-items:center;margin-top:12px;background:var(--tint);border:1px solid #F7C9AE;border-radius:12px;padding:11px 13px;font-size:13.5px;color:var(--ink);text-align:left;line-height:1.45}.gift i{font-style:normal;font-size:20px}.gift b{color:var(--or2)}.gift small{font-size:11.5px;color:var(--ink3)}
+.first{display:flex;flex-direction:column;align-items:center;background:linear-gradient(135deg,#FFF1E8,#FFE4D3);border:1.5px solid #F7C9AE;border-radius:14px;padding:12px 14px;margin:0 0 14px}.first b{font-size:15px}.first span{font-size:12.5px;color:var(--or2);font-weight:700;margin-top:2px}
+.beat{text-align:center;margin-top:26px}
+.beat h3{font-size:26px;font-weight:800;letter-spacing:-.5px;margin:0}.beat h3 em{font-style:normal;color:var(--or);background:linear-gradient(transparent 62%,#FFE1CF 62%)}.beat h3 em.nv{color:#1E3A5F;background:linear-gradient(transparent 62%,#D9E4F2 62%)}
+.beat p{font-size:14px;color:var(--ink2);line-height:1.5;margin:6px 0 12px}
+.beat .fn{font-size:12.5px;color:var(--ink3);margin-top:10px;line-height:1.5}
+.tkwrap{background:#fff;border-radius:18px;padding:22px 26px 24px}
+.tkn{position:relative;text-align:left;background:linear-gradient(135deg,#1E3A5F,#2B5080);color:#fff;border-radius:14px;padding:16px 18px 14px;transform:rotate(2.5deg);box-shadow:0 10px 22px rgba(30,58,95,.28)}
+.tkn:before,.tkn:after{content:"";position:absolute;top:50%;width:20px;height:20px;border-radius:50%;background:#fff;transform:translateY(-50%)}
+.tkn:before{left:-10px}.tkn:after{right:-10px}
+.tkn small{display:block;font-size:12px;font-weight:700;opacity:.95}
+.tkn .v{font-size:32px;font-weight:800;letter-spacing:-1px;line-height:1.1;margin:3px 0}
+.tkn .d{font-size:11px;opacity:.95;white-space:nowrap}
+.tkn .ln{position:absolute;top:12px;bottom:12px;left:70%;border-left:2px dashed rgba(255,255,255,.55)}
+.tkn .stub{position:absolute;right:0;top:0;bottom:0;width:30%;display:flex;align-items:center;justify-content:center}.tkn .stub i{width:54px;height:54px;border-radius:50%;background:#fff;display:block}
+.tk{position:relative;background:#fff;border-radius:18px;overflow:hidden}
+.tk img{display:block;width:100%;height:auto}
+.tk .txt{position:absolute;left:12%;top:46%;width:56%;transform:translateY(-50%) rotate(-3deg);transform-origin:left center;color:#fff}
+.tk small{display:block;font-size:12px;font-weight:700;opacity:.95}
+.tk .v{font-size:34px;font-weight:800;letter-spacing:-1px;line-height:1.1;margin:3px 0 3px}
+.tk .d{font-size:11px;opacity:.95;line-height:1.4;white-space:nowrap}
+.tk .side{position:absolute;left:82.9%;top:43.9%;width:18.8%;aspect-ratio:1;transform:translate(-50%,-50%) rotate(-3deg);display:flex;align-items:center;justify-content:center;color:#1E3A5F;font-weight:800}
+.tk .side b{font-size:20px}
+.stack{margin-top:14px;display:flex;gap:12px;align-items:center}
+.grid4{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.sm{position:relative;background:#fff;border:1.5px solid #F7C9AE;border-radius:12px;padding:9px 12px;box-shadow:0 4px 10px rgba(60,40,10,.06);display:flex;justify-content:space-between;align-items:center}
+.sm:before,.sm:after{content:"";position:absolute;top:50%;width:14px;height:14px;border-radius:50%;background:var(--bg);transform:translateY(-50%);border:1.5px solid #F7C9AE}
+.sm:before{left:-8px;border-left-color:transparent}.sm:after{right:-8px;border-right-color:transparent}
+.sm b{font-size:17px;color:var(--or)}.sm span{font-size:11.5px;color:var(--ink2)}
+.stack .cap{width:38%;font-size:13.5px;font-weight:800;line-height:1.4}.stack .cap small{display:block;margin-top:4px;font-size:11.5px;color:var(--ink3);font-weight:500}
+.pair{margin-top:12px}.pair .who{font-size:12.5px;font-weight:800;color:#1E3A5F;margin:0 0 6px 4px}
+.one{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--soft);border-radius:14px;padding:13px 14px;font-size:14px;line-height:1.45}
+.one b{color:var(--or);white-space:nowrap}.one small{display:block;font-size:11.5px;color:var(--ink3);margin-top:2px}
+.cm{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cm .p{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
+.cm .p .im{position:relative}.cm .p img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover}
+.cm .p .n{position:absolute;left:8px;top:8px;width:22px;height:22px;border-radius:50%;background:var(--or);color:#fff;font-size:12px;font-weight:800;text-align:center;line-height:22px}
+.cm .p .t{padding:8px 10px 10px}.cm .p .t b{display:block;font-size:13.5px;line-height:1.35}.cm .p .t span{display:block;font-size:11.5px;color:var(--ink3);margin-top:3px;line-height:1.4}
+.cm .p .t q{display:block;font-size:12px;color:var(--or2);font-weight:700;margin-top:4px;quotes:"“" "”"}
+details{border-top:1px solid var(--line);padding:12px 2px}details:last-of-type{border-bottom:1px solid var(--line)}
+summary{font-size:14.5px;font-weight:700;cursor:pointer;list-style:none;display:flex;justify-content:space-between}summary::after{content:"+";color:var(--ink3)}details[open] summary::after{content:"−"}
+details p{font-size:13.5px;color:var(--ink2);line-height:1.6;margin:8px 0 0}
+.bar{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:100%;max-width:420px;background:rgba(251,248,244,.97);border-top:1px solid var(--line);padding:12px 20px calc(16px + env(safe-area-inset-bottom,0px));z-index:5}
+.bar .note{text-align:center;font-size:12.5px;color:var(--ink3);margin-bottom:8px}
+.btn{background:var(--or);color:#fff;font-weight:800;font-size:17px;border-radius:14px;height:54px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:0;width:100%;font-family:inherit}
+.btn.g{background:#fff;color:var(--ink);border:1.5px solid var(--line);font-weight:700}
+.grp{margin-top:20px}.grp .lb{font-size:14px;font-weight:800;margin-bottom:8px}.grp .lb small{font-weight:500;color:var(--ink3);margin-left:6px}
+.tg{display:flex;flex-wrap:wrap;gap:8px}
+.tg label{display:flex;align-items:center;gap:6px;border:1.5px solid var(--line);border-radius:999px;padding:8px 12px;font-size:13.5px;background:#fff;cursor:pointer}
+.tg input{display:none}.tg label:has(input:checked){border-color:#F7A77C;background:var(--tint);font-weight:700}
+.inp{border:1.5px solid var(--line);border-radius:12px;padding:13px 14px;font-size:15px;width:100%;background:#fff;font-family:inherit}
+.inp:focus{outline:2px solid #F7A77C}
+/* letter */
+.lt{position:relative;border:1px solid #E8DFD2;border-radius:10px;background:#FFFDF8;padding:16px 16px 14px;box-shadow:0 4px 14px rgba(60,40,10,.06);font-family:"Nanum Myeongjo",serif;color:#2F2A25}
+.lt .lb2{font-weight:700;font-size:13.5px;margin-bottom:8px}
+.lt .lbody{font-size:13px;line-height:1.8}.lt .lbody mark{background:#FFE7D6;color:#2F2A25;border-radius:3px;padding:0 2px}
+.lt .lsig{text-align:right;font-size:13px;margin:8px 0 14px}
+.lt .lco{border-top:1px solid #E3DACB;padding-top:9px;font-family:inherit;font-size:9.5px;color:#7A7168;line-height:1.55;padding-right:58px}
+.lt .lco b{font-size:11px;color:#2F2A25}.lt .lco .c3{color:#9A5A34}
+.lt .lqr{position:absolute;right:14px;bottom:14px;width:46px;height:46px}
+.lt.small{transform-origin:top left;cursor:pointer}
+.ltcap{font-size:12px;color:var(--ink3);text-align:center;margin-top:8px}
+.pvh{font-size:12px;color:var(--ink3);margin:22px 0 6px}
+.note2{background:var(--soft);border-radius:12px;padding:12px 14px;font-size:13px;color:var(--ink2);line-height:1.55;margin-top:12px}.note2 b{color:var(--ink)}
+.done{text-align:center;padding-top:40px}.done .ck{width:64px;height:64px;border-radius:50%;background:var(--or);color:#fff;font-size:30px;display:flex;align-items:center;justify-content:center;margin:0 auto 18px}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:20;display:flex;align-items:center;justify-content:center;padding:20px}
+.modal .in{width:100%;max-width:380px;max-height:90vh;overflow:auto}
+.modal .x{text-align:center;color:#fff;font-size:13px;margin-top:12px}
+[hidden]{display:none!important}
+.tiny{font-size:11px;color:var(--ink3);text-align:center;margin-top:10px;line-height:1.5}
+
+/* ── 줄바꿈 규칙 ── */
+body{word-break:keep-all;overflow-wrap:break-word;line-break:strict}
+.h1,.h2,h3,.beat h3,.cpn .t,.fin .h2,.done .big,.sheet .h{text-wrap:balance}
+p,.lead,.sub,.fn,.note,.note2,.cond,.say,.qt,.pt,.bf span,.vc span,.cm .p .t span,.d{text-wrap:pretty}
+.nb{white-space:nowrap}
+/* ── 간격 규칙: 섹션 32 · 제목→본문 8 · 본문→요소 14 · 요소→캡션 8 · 요소↔요소 10 ── */
+.sech{margin:32px 0 12px}
+.h1{margin-bottom:10px}.h1+.lead{margin-top:0}
+.lead{margin:0 0 14px;line-height:1.6}
+.beat{margin-top:28px}.beat p{margin:8px 0 14px}.beat .fn{margin-top:8px}
+.sec{margin-top:32px}.sec .k{margin-bottom:4px}.h2{margin:0 0 12px}
+.sub{margin-top:8px;line-height:1.5}
+.one{margin-top:10px}
+/* ── 티켓 글자: 티켓 폭에 맞춰 줄어들게(좁은 폰에서 절취선 넘지 않게) ── */
+.tk{container-type:inline-size}
+.tk .txt{width:54%}.tk small{font-size:3.3cqw}.tk .v{font-size:9cqw}.tk .d{font-size:3cqw;white-space:nowrap}
+.tk.sm2 small{font-size:3.3cqw}.tk.sm2 .v{font-size:8.6cqw}.tk.sm2 .d{font-size:3cqw}
+.tkn{container-type:inline-size}
+.tkn small{font-size:4cqw;white-space:nowrap}.tkn .v{font-size:10.5cqw}.tkn .d{font-size:3.7cqw;white-space:nowrap}
+/* ── 점주 페이지 세부 ── */
+.vh{font-size:12.5px;font-weight:800;color:var(--ink3);margin:16px 0 6px 2px}
+.vc b{display:flex;align-items:baseline;gap:6px}.vc b small{margin:0;white-space:nowrap}
+.appc .rq{font-size:9.5px;white-space:nowrap;gap:4px;padding:0 4px}
+.appc .lb{white-space:nowrap}
+/* ── 봉투 말풍선: 손글씨 칸 위 ── */
+.env{height:262px!important}
+.env .tip{right:18px!important;bottom:110px!important;line-height:1.3!important}
+.env .tip:after{right:auto!important;left:50%!important;top:auto!important;bottom:-5px!important;transform:translateX(-50%)!important;border:5px solid transparent!important;border-bottom:0!important;border-top-color:var(--or2)!important}
+.first{gap:2px}.first .fb{font-style:normal;font-size:11px;font-weight:800;color:#fff;background:var(--or);border-radius:999px;padding:2px 9px;margin-bottom:4px}
+.first b{font-size:15px;color:var(--ink)}.first b span{font-size:inherit!important;color:inherit!important;font-weight:inherit!important;margin:0!important}
+.first small{font-size:12.5px;color:var(--or2);font-weight:700}
+
+/* ── 새 이미지 ── */
+/* 쿠폰 카드 + 인물(받는 사람의 기쁨) */
+.cpw{position:relative;display:flex;align-items:flex-end;justify-content:center;margin:4px auto 0;max-width:340px;padding-top:8px}
+.cpw .fig{height:150px;width:auto;flex:0 0 auto;position:relative;z-index:3!important;margin-left:-22px}
+.cpw.own .fig{margin-left:0;margin-right:-14px;height:142px}.cpw .tk,.cpw .tkn{z-index:1!important}
+.cpw .spk{position:absolute;z-index:3;font-style:normal;color:var(--or);font-size:15px;line-height:1}
+.cpw .s1{right:96px;top:4px}.cpw .s2{right:84px;top:22px;font-size:10px;color:#FFB08A}.cpw .s3{right:8px;top:30px;font-size:11px}
+.cpw.own .s1{left:104px;right:auto;top:6px}.cpw.own .s2{left:92px;right:auto;top:24px}.cpw.own .s3{left:auto;right:6px;top:18px;color:#1E3A5F}
+.cpw .tk,.cpw .tkn{flex:0 1 214px;width:auto!important;max-width:214px;margin:0 0 26px!important;position:relative;overflow:hidden;border-radius:16px!important;padding:16px 16px 15px!important;color:#fff;text-align:left;container-type:normal}
+.cpw .tk{background:linear-gradient(135deg,#FF9F5E 0%,#F47A2C 45%,#E85E12 100%)!important;transform:rotate(-4deg);box-shadow:0 12px 22px rgba(232,94,18,.28),0 2px 0 rgba(255,255,255,.35) inset!important}
+.cpw .tkn{background:linear-gradient(135deg,#2F5A8C 0%,#1E3A5F 60%,#172E4C 100%)!important;transform:rotate(4deg)!important;box-shadow:0 12px 22px rgba(30,58,95,.30),0 2px 0 rgba(255,255,255,.18) inset!important}
+.cpw .tk:after,.cpw .tkn:after{content:"";display:block!important;position:absolute;inset:0;background:linear-gradient(118deg,rgba(255,255,255,.30) 0%,rgba(255,255,255,0) 38%);pointer-events:none;border-radius:inherit;top:0;left:0;width:auto;height:auto;transform:none}
+.cpw .tkn:before{display:none!important}
+.cpw .txt{position:static!important;transform:none!important;width:auto!important;text-align:left}
+.cpw small{display:block;font-size:11.5px!important;font-weight:700;opacity:.95;white-space:nowrap}
+.cpw .v{font-size:31px!important;font-weight:800;letter-spacing:-1px;line-height:1.1;margin:4px 0 3px}
+.cpw .d{font-size:11px!important;opacity:.92;white-space:nowrap}
+.tkwrap,.tix{padding:0!important;background:none!important}
+.env:before,.env .seal,.env .from .line{display:none!important}
+.env .brand{left:5.5%;top:8%;font-size:3.4cqw}.env .brand span{font-size:2.9cqw}
+.env .to{left:5.5%;top:30%}.env .to b{font-size:5.8cqw}.env .to>span{font-size:3.2cqw}
+.env .from{left:0;right:0;top:0;bottom:0;width:auto;height:auto}
+.env .from .guide{left:auto;right:49%;top:auto;bottom:21.4%;font-size:2.9cqw}
+.env .from .hint{left:54.5%;top:auto;bottom:21.2%;font-size:4.6cqw}
+.env .from .hand{left:55%;right:auto;bottom:12.4%;font-size:5.3cqw}
+.env .tip{left:5.5%!important;right:auto!important;bottom:9%!important;font-size:3cqw!important;line-height:1.3!important;text-align:left!important;white-space:nowrap}
+.env .tip:after{left:auto!important;right:-5px!important;top:50%!important;bottom:auto!important;transform:translateY(-50%)!important;border:5px solid transparent!important;border-right:0!important;border-left-color:var(--or2)!important}
+.sf .awn,.sf .win,.sf .door,.sf .board{display:none!important}
+.sf .sign{background:none!important;top:5.4%!important;height:14.4%!important;left:8%!important;right:8%!important;font-size:9px!important;color:#F6E7C9!important}
+.emo{background:none!important;overflow:hidden;padding:0!important}.emo img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
+.gift i img{width:24px;height:auto;display:block}
+.fcol.dst em img{width:34px;height:auto;display:block;margin:0 auto}
+.ctag{display:inline-block;font-size:11px;font-weight:800;color:#fff;background:var(--or2);border-radius:6px;padding:2px 7px;margin-right:6px;vertical-align:1px}.ctag.p{background:#8B6A4F}.terms{margin-top:22px;font-size:12px;color:var(--ink3)}.terms summary{cursor:pointer;font-weight:700}.terms ul{margin:6px 0 0;padding-left:16px;line-height:1.55}.terms li{margin:2px 0}.cp2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0 6px;text-align:left}.cp2 .t{position:relative;border-radius:14px;padding:14px 13px 13px;color:#fff;overflow:hidden;min-height:112px;display:flex;flex-direction:column;justify-content:space-between}.cp2 .t:before,.cp2 .t:after{content:"";position:absolute;top:58%;width:16px;height:16px;border-radius:50%;background:var(--bg)}.cp2 .t:before{left:-8px}.cp2 .t:after{right:-8px}.cp2 .a{background:linear-gradient(135deg,#B9926F,#8B6A4F);box-shadow:0 8px 18px rgba(139,106,79,.25)}.cp2 .b{background:linear-gradient(135deg,#FF9F5E,#E85E12);box-shadow:0 8px 18px rgba(232,94,18,.28)}.cp2 .s{display:block;font-size:11.5px;font-weight:700;line-height:1.35;opacity:.96}.cp2 .v{font-size:23px;font-weight:800;letter-spacing:-.6px;line-height:1.15;margin:8px 0 4px}.cp2 .d{font-size:11.5px;line-height:1.4;opacity:.95;border-top:1px dashed rgba(255,255,255,.5);padding-top:7px;text-wrap:pretty}.cm.v3{grid-template-columns:1fr;gap:10px}.cm.v3 .p img{aspect-ratio:4/3;object-position:center}.cm.v3 .p .t b{font-size:15px}.cm.v3 .p .t span{font-size:12.5px}.cpp{margin:16px 0 4px;text-align:left}.cpp .k{position:relative;width:90%;container-type:inline-size}.cpp .k.a{width:92.8%;margin-left:-1%}.cpp .k.a .txt{left:12.4%;top:41.5%;width:54.3%;transform:translateY(-50%) rotate(1deg)}.cpp .k.a .ic{left:82%;top:49%;width:12.6%;transform:translate(-50%,-50%) rotate(1deg)}.cpp .k.b{margin:-9% 0 0 auto}.cpp .k>img.bg{display:block;width:100%;height:auto;mix-blend-mode:multiply}.cpp .txt{position:absolute;left:11%;top:46%;width:56%;transform:translateY(-50%) rotate(-3deg);transform-origin:left center;color:#fff}.cpp .s{display:block;font-size:4.1cqw;font-weight:700;line-height:1.3;opacity:.96}.cpp .v{font-size:10cqw;font-weight:800;letter-spacing:-.4cqw;line-height:1.1;margin:1.2cqw 0 1cqw;white-space:nowrap}.cpp .d{font-size:3.8cqw;line-height:1.35;opacity:.95}.cpp .ic{position:absolute;left:82.9%;top:43.9%;width:13%;transform:translate(-50%,-50%) rotate(-3deg)}
+/* 쿠폰 카드 인터랙션 */
+.cpp .k{will-change:transform;transition:transform .5s cubic-bezier(.2,.9,.3,1.2),opacity .5s ease;transform-origin:50% 60%}
+.cpp:not(.in) .k.a{opacity:0;transform:translate(-24px,18px) rotate(-9deg)}
+.cpp:not(.in) .k.b{opacity:0;transform:translate(24px,22px) rotate(7deg)}
+.cpp.in .k.b{transition-delay:.18s}
+.cpp .k.t{animation:none!important;transform:scale(.97) rotate(0)!important;transition:transform .12s ease}
+.cpp .k.s{animation:none!important;transform:scale(1.03) translateY(-3px)!important;transition:transform .32s cubic-bezier(.2,.9,.3,1.3)}
+@media(prefers-reduced-motion:reduce){.cpp .k,.cpp .k:after{animation:none!important;transition:none!important}.cpp:not(.in) .k{opacity:1;transform:none}}
+
+/* 글꼴 위계 · 색 (10/15 검토 반영) */
+:root{--ink3:#71665D;--or-text:#DC5A12;--btn:#C4541A}
+@font-face{font-family:"Cafe24 Ssurround";src:url("https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_2105_2@1.0/Cafe24Ssurround.woff") format("woff");font-weight:700;font-display:swap}
+.nav{font-size:15px;font-weight:600;line-height:22px}
+.h1{font-size:26px;font-weight:700;line-height:36px;letter-spacing:-.02em}
+.h1 em,.beat h3 em{color:var(--or-text)}
+.lead{font-size:16px;font-weight:400;line-height:26px;color:var(--ink2)}
+.sech b{font-size:20px;font-weight:700;line-height:28px;letter-spacing:-.015em}
+.beat h3{font-size:24px;font-weight:700;line-height:34px;letter-spacing:-.02em}
+.beat p{font-size:16px;font-weight:600;line-height:24px;color:var(--ink)}
+.cm.v3 .p .t b{font-size:17px;font-weight:700;line-height:25px}
+.cm.v3 .p .t span{font-size:15px;font-weight:400;line-height:23px;color:var(--ink2);margin-top:4px}
+.btn{font-size:17px;font-weight:700;line-height:24px;min-height:56px;background:var(--btn);letter-spacing:-.01em}
+.btn.g{background:#fff}
+.inp{font-size:16px;line-height:24px;min-height:52px}
+.lb{font-size:16px;font-weight:600;line-height:24px}
+.lb small{font-weight:400}
+.sub,.note{font-size:14px;line-height:22px;color:var(--ink3)}
+.note2{font-size:15px;line-height:23px}
+.tiny,label.tiny{font-size:14px!important;line-height:22px;color:var(--ink2)}
+.sech span{background:var(--btn)}
+.cpp .s{font-size:max(4.1cqw,14px);line-height:1.3}
+.cpp .d{font-size:max(3.8cqw,13px);line-height:1.3;letter-spacing:-.01em;white-space:nowrap}
+.cpp .k.a .txt{width:58%}.cpp .k.b .txt{width:60%}
+.cpp .v{font-weight:800}
+html.f2 .h1{font-family:"Cafe24 Ssurround","Pretendard Variable",Pretendard,sans-serif;font-weight:700;letter-spacing:0;line-height:38px}
+
+.cond{margin:10px 2px 0;font-size:13.5px;line-height:21px;color:var(--ink3);text-align:left}
+.agree{display:flex;gap:8px;align-items:flex-start;text-align:left;margin-top:16px;font-size:15px;line-height:23px;color:var(--ink)}.agree input{margin:3px 0 0}.agree b{font-weight:600;color:var(--ink3)}
+.legal{margin:8px 0 0 24px;font-size:14px;line-height:22px;color:var(--ink2);text-align:left}.legal a{color:var(--or2);font-weight:700}
+.beat>p{font-size:15px;line-height:23px;color:var(--ink2);font-weight:400}
+.lead b,.beat>p b,.cm .p .t span b,.done .lead b{font-weight:700;color:var(--ink)}
+.cm .p .t span b{display:inline;font-size:inherit;line-height:inherit;margin:0}
+.sub2{font-size:14px;line-height:22px;color:var(--ink3);margin:-6px 0 0}
+.lead{margin-bottom:12px}
+.beat>p b{color:var(--or-text)}
+.hl{font-weight:700;color:var(--ink);background:linear-gradient(transparent 58%,#FFDCC6 58%);padding:0 2px}
+.beat>p .hl{color:var(--or-text)}
+.cm .p .t span span.hl,.lead span.hl,.note2 span.hl{display:inline;font-size:inherit;line-height:inherit;margin:0;color:var(--ink)}
+ul.legal{list-style:none;padding:0}ul.legal li{position:relative;padding-left:12px}ul.legal li:before{content:"·";position:absolute;left:0;font-weight:700}
+ul.dl{list-style:none;padding:0}ul.dl li{position:relative;padding-left:12px}ul.dl li+li{margin-top:2px}ul.dl li:before{content:"·";position:absolute;left:1px;font-weight:700}
+ul.cond.dl li:first-child b{color:var(--ink)}
+ul.note2.dl{padding:12px 14px 12px 16px}ul.cond.dl{font-weight:400;color:var(--ink3);font-size:13.5px;line-height:21px}ul.cond.dl li b{font-weight:700;color:var(--ink)}
+.beat{text-align:left}.beat>p{margin:0 0 8px!important}
+.cm .p .t span br{display:block;content:"";margin-top:2px}
+.hl{padding:0 2px;margin:0 -2px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.beat{margin-top:12px!important}
+.hero{display:block;width:100%;aspect-ratio:2/1;object-fit:cover;border-radius:16px;margin:18px 0 0}
+.eyebrow{font-size:15px;line-height:22px;color:var(--ink2);margin:18px 0 -14px}.eyebrow b{color:var(--ink);font-weight:700}
+.beat{margin-top:4px!important}
+.cm .p .t .n{color:#fff!important;font-weight:800;text-align:center;position:static;display:inline-block;vertical-align:2px;margin-right:7px;width:20px;height:20px;line-height:20px;font-size:11.5px}
+.grp .hint{font-size:13.5px;line-height:20px;color:var(--ink3);margin:-4px 0 8px}
+.relink{text-align:center;margin:22px 0 0;font-size:14px}.relink .link2{color:var(--ink2);text-decoration:underline;cursor:pointer}
+.sech b{margin-left:0}
+.lead .store{display:inline!important;font-size:inherit!important;color:inherit!important;margin:0!important;font-weight:inherit}.rfin{margin-top:28px;background:#fff;border:1px solid #F7C9AE;border-radius:16px;padding:18px 16px}.rfin .rf-h{font-size:19px;font-weight:700;letter-spacing:-.02em;margin-bottom:10px}.rfin ul{list-style:none;margin:0;padding:0}.rfin li{display:flex;gap:8px;align-items:center;font-size:15px;line-height:22px;color:var(--ink2);padding:4px 0}.rfin li i{flex:0 0 20px;height:20px;border-radius:50%;background:var(--tint);color:var(--or2);display:flex;align-items:center;justify-content:center}.rfin li i svg{width:13px;height:13px}.qa details{border-top:1px solid var(--line);padding:13px 2px}.qa details:last-of-type{border-bottom:1px solid var(--line)}.qa summary{font-size:15px;font-weight:700;color:var(--ink);cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:10px}.qa summary::-webkit-details-marker{display:none}.qa summary:after{content:"+";color:var(--ink3);font-weight:400}.qa details[open] summary:after{content:"−"}.qa p{margin:8px 0 0;font-size:14.5px;line-height:22px;color:var(--ink2)}.cm .p .t .store{display:inline!important;font-size:inherit!important;color:inherit!important;margin:0!important;font-weight:inherit}.sub2 .nick{display:inline!important;font-size:inherit!important;color:inherit!important;margin:0!important;font-weight:inherit}.cpn-n{margin:10px 0 0!important;text-align:center;font-size:13px!important;line-height:19px!important;color:var(--ink3)!important}.bonus small{display:block;margin-top:4px;font-size:12.5px;line-height:18px;color:var(--ink3)}.sub2 .store{display:inline!important;font-size:inherit!important;color:inherit!important;margin:0!important;font-weight:inherit}.legal{font-size:12.5px!important;line-height:19px!important;color:var(--ink3)!important;margin:6px 0 0 24px!important}.legal .lk{color:var(--ink2);font-weight:600;text-decoration:underline;text-decoration-color:#D9C8B6;text-underline-offset:2px}.pdx{margin:6px 0 0 24px;font-size:12.5px;line-height:19px;color:var(--ink3);text-align:left}.pdx summary{cursor:pointer;list-style:none;color:var(--ink3);text-decoration:underline;text-underline-offset:2px;display:inline-block}.pdx summary::-webkit-details-marker{display:none}.pdx dl{margin:8px 0 0;padding:10px 12px;background:var(--soft,#F6F3EF);border-radius:10px;display:grid;grid-template-columns:auto 1fr;gap:4px 10px}.pdx dt{font-weight:600;color:var(--ink2);white-space:nowrap}.pdx dd{margin:0}.pdx{border:0!important;padding:0!important}.pdx summary{font-size:12.5px!important;font-weight:400!important;line-height:19px!important;color:var(--ink3)!important;padding:0!important;border:0!important}.pdx summary:after,.pdx summary:before{content:none!important}.legal .lk{font-weight:600!important}</style></head><body><div class="wrap">
+
+<!-- ========== 모집 랜딩 ========== -->
+<section id="v-land">
+<div class="nav">패스오더 · 편지 신청</div>
+<div class="pad">
+<div class="h1">다음에 <span class="store">패스카페</span>에 들르실 때,<br>사장님께 편지 한 통을<br><em>건네 주시겠어요?</em></div>
+<p class="lead"><span class="hl">패스오더에도 <span class="store">패스카페</span>를 찾는 손님들이 있어요.</span><br>사장님 가게에 도움이 될 반가운 소식이에요.</p>
+<p class="sub2"><span class="store">패스카페</span>에 전달할 편지는 패스오더가 대신 써서 무료로 보내드릴게요!</p>
+
+<div class="sech"><b>이런 쿠폰을 드려요</b></div>
+
+<div class="beat"><div class="cpp"><div class="k a"><img class="bg" src="assets/img/coupon_a_bg.jpg" alt=""><div class="txt"><span class="s">편지를 건네기만 해도</span><div class="v">참여 쿠폰</div><div class="d">사장님 안내 신청이 없어도 드려요</div></div><img class="ic" src="assets/img/coupon_a_icon.png" alt=""></div><div class="k b"><img class="bg" src="assets/img/coupon_b_bg.jpg" alt=""><div class="txt"><span class="s">사장님이 안내 신청하시면</span><div class="v">10,000원</div><div class="d">패스오더에 안내 신청이 오면 드려요</div></div><img class="ic" src="assets/img/coupon_b_icon.png" alt=""></div></div></div>
+
+
+
+<div class="sech"><b>이렇게 참여해요</b></div>
+<div class="cm v3">
+<div class="p"><div class="im"><img src="assets/img/step1.jpg" alt=""></div><div class="t"><b><span class="n">1</span>편지를 받아요</b><span><span class="hl">주소만 적어 주시면</span><br>신청이 끝나면 편지를 우편으로 보내드려요</span></div></div>
+<div class="p"><div class="im"><img src="assets/img/step2.jpg" alt=""></div><div class="t"><b><span class="n">2</span>가볍게 건네요</b><span>주문하러 가실 때<br><span class="hl">받은 날부터 2주 안에</span> <span class="store">패스카페</span> 사장님이나 직원분께 건네요</span></div></div>
+<div class="p"><div class="im"><img src="assets/img/step3.jpg" alt=""></div><div class="t"><b><span class="n">3</span>쿠폰을 받아요</b><span><span class="hl"><i data-cfg="PAY_DAYS" style="font-style:normal">3일</i> 안에</span> 참여 쿠폰이 들어가요!</span></div></div>
+</div>
+<div class="rfin"><div class="rf-h">편지 한 통이면 충분해요</div><ul><li><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.2 4.2L19 7"/></svg></i>부담하실 비용은 전혀 없어요</li><li><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.2 4.2L19 7"/></svg></i>편지는 패스오더가 써서 보내드려요</li><li><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.2 4.2L19 7"/></svg></i><span>주문하러 가실 때,<br>가볍게 툭 건네기만 하면 돼요</span></li></ul></div>
+
+</div>
+<div class="bar"><div class="note"><span id="closeBar"></span>선착순 조기 종료될 수 있어요!</div><button class="btn" onclick="go('v-s1')">지금 편지 신청하기 &gt;</button></div>
+</section>
+
+<!-- ========== 1/2 이야기 고르기 ========== -->
+<section id="v-s1" hidden>
+<div class="nav"><i onclick="go('v-land')">‹</i>편지 신청</div>
+<div class="pad">
+<div class="h1" style="font-size:24px">어디로 보내드릴까요?</div>
+<p class="lead" style="margin-top:-6px">신청하신 분의 이름과 주소를 적어 주세요.</p>
+<div class="note2">✉️ 편지는 패스오더가 써서 보내드려요.</div>
+<input type="hidden" id="nick" value="라떼좋아">
+<div class="grp"><div class="lb">신청하신 분 이름</div><input class="inp" id="name" placeholder="신청하신 분 이름" autocomplete="name"></div>
+<div class="grp"><div class="lb">신청하신 분 주소</div><div class="hint"><b>매장 주소가 아니라</b> 편지를 직접 받으실 주소예요 · 집이 아니어도 직접 받으실 수 있는 곳이면 괜찮아요</div><input type="hidden" id="zip"><div style="display:flex;gap:8px"><input class="inp" id="addr" placeholder="도로명 주소" readonly onclick="findAddr()"><button type="button" class="btn g" style="width:auto;height:auto;padding:0 16px;font-size:14px;flex:0 0 auto" onclick="findAddr()">주소 찾기</button></div><input class="inp" id="addr2" style="margin-top:8px" placeholder="상세 주소 (동 · 호수)"></div>
+<ul class="note2 dl" style="margin-top:20px"><li>편지를 건네기만 해도 <b>참여 쿠폰</b>을 드려요</li><li>사장님이 편지를 보고 패스오더에 안내 신청을 하시면 <b>10,000원 쿠폰</b>을 추가로 드려요</li></ul>
+<label class="tiny agree"><input type="checkbox" id="agree"><span><b>[필수]</b> 편지 발송을 위한 개인정보 수집·이용에 동의합니다</span></label>
+<ul class="legal"><li>수집 항목: 신청하신 분의 이름, 주소</li><li>수집·이용 목적: 편지 발송</li><li>보유 기간: <span class="lk">편지를 보낸 뒤 바로 파기</span></li></ul><details class="pdx"><summary>개인정보 수집 · 이용 안내 자세히 보기</summary><dl><dt>수집 항목</dt><dd>신청하신 분의 이름, 주소</dd><dt>이용 목적</dt><dd>편지 발송</dd><dt>보유 기간</dt><dd>편지를 보낸 뒤 바로 지워요</dd><dt>동의 거부</dt><dd>동의하지 않으셔도 돼요. 다만 이 경우 편지를 보내 드릴 수 없어요.</dd></dl></details>
+</div>
+<div class="bar"><div class="note">편지를 받으시면 2주 안에 <span class="store">패스카페</span>에 건네 주세요</div><div class="tiny" id="err" hidden style="color:#C4541A;margin:0 0 8px"></div><button class="btn" id="submit" onclick="submitForm()">편지 신청 완료하기 &gt;</button></div>
+</section>
+
+<!-- ========== 완료 ========== -->
+<section id="v-closed" hidden>
+<div class="nav">편지 신청</div>
+<div class="pad done">
+<div class="h1" style="font-size:24px;margin:24px 0 10px" id="closedH">이 매장은 신청이 마감됐어요</div>
+<p class="lead" id="closedP"><span class="store">패스카페</span> 편지는 선착순 3명이 모두 신청했어요.<br>관심 가져 주셔서 고마워요.</p>
+</div>
+</section>
+
+<section id="v-done" hidden>
+<div class="nav">편지 신청</div>
+<div class="pad done">
+<div class="ck">✓</div>
+<div class="h1" style="font-size:24px;margin:0 0 10px">편지 신청을 잘 받았어요</div>
+<p class="lead"><span id="closeTxt">신청 마감</span> 뒤 <span class="hl"><span data-cfg="SEND_DAYS">3일</span> 안에</span> 편지를 보내드려요.<br>편지가 도착하면 카카오톡으로 알려드릴게요.</p>
+
+<ul class="note2 dl" style="text-align:left"><li>편지를 받으시면 <span class="hl">2주 안에</span> <span class="store">패스카페</span> 사장님이나 직원분께 건네 주세요</li><li>편지를 매장에 전달하면, 도착 안내 카카오톡의 「내 편지 보기」에서 전달한 날을 남겨 주세요. 남겨 주시면 <span class="hl">참여 쿠폰</span>을 드려요</li></ul>
+<p class="relink"><span class="link2" onclick="go('v-land')">참여 안내 다시 보기</span></p>
+
+</div>
+</section>
+
+</div>
+
+</div>
+<script>
+// 손님별 값은 URL 파라미터로 받는다 (?uid=&sid=&grp=&g=&src=&store=&nick=&close=). 없으면 예시 값
+const Q=new URLSearchParams(location.search);
+const DATA={store:Q.get('store')||'패스카페',n:+(Q.get('n')||9),nick:Q.get('nick')||'라떼좋아',first:Q.get('first')!=='0'};
+document.querySelectorAll('.store').forEach(e=>e.textContent=DATA.store);
+document.querySelectorAll('.cnt').forEach(e=>e.textContent=DATA.n);
+function setNick(v){document.querySelectorAll('.nick').forEach(e=>e.textContent=v);}
+const UA=navigator.userAgent;
+const DEVICE=/iPhone|iPad|iPod/.test(UA)?'iOS':/Android/.test(UA)?'Android':'PC';
+const APP=/KAKAOTALK/i.test(UA)?'카카오톡':/NAVER\(inapp/i.test(UA)?'네이버':/Instagram/i.test(UA)?'인스타그램':/FBAN|FBAV/.test(UA)?'페이스북':'일반 브라우저';
+// 방문 기록: 열면 「방문」에 한 줄, 신청 화면으로 넘어가면 도달 단계 갱신. 같은 ID가 신청번호(= 편지코드)가 된다
+const T0=new Date(),VID=('L'+Date.now().toString(36)+Math.random().toString(36).slice(2,5)).toUpperCase();
+function track(o){if(CONFIG.SUBMIT_URL&&Q.get('uid'))fetch(CONFIG.SUBMIT_URL,{method:'POST',mode:'no-cors',keepalive:true,headers:{'Content-Type':'text/plain'},body:JSON.stringify({vid:VID,uid:Q.get('uid')||'',sid:Q.get('sid')||'',grp:Q.get('grp')||'',g:Q.get('g')||'',src:Q.get('src')||'',store:DATA.store,device:DEVICE,app:APP,ref:location.href,ts:new Date().toISOString(),...o})}).catch(()=>{});}
+track({type:'visit',ts:T0.toISOString()});
+let formSeen=false;
+function go(id){document.querySelectorAll('section').forEach(s=>s.hidden=s.id!==id);window.scrollTo(0,0);if(id==='v-s1'&&!formSeen){formSeen=true;track({type:'step'});}}
+document.getElementById('nick').value=DATA.nick;
+document.getElementById('nick').addEventListener('input',e=>setNick(e.target.value||DATA.nick));
+
+setNick(DATA.nick);
+{const c=Q.get('close');if(c){const d=new Date(c);if(!isNaN(d))document.getElementById('closeBar').textContent=(d.getMonth()+1)+'월 '+d.getDate()+'일까지 · ';}}
+{const c=Q.get('close');if(c){const d=new Date(c);if(!isNaN(d))document.getElementById('closeTxt').textContent=(d.getMonth()+1)+'월 '+d.getDate()+'일 신청 마감';}}
+document.querySelectorAll('[data-cfg]').forEach(e=>{if(CONFIG[e.dataset.cfg])e.textContent=CONFIG[e.dataset.cfg];});
+// 마감: 가게당 신청 3명 · 시험별 우편 정원(Code.gs의 STORE_CAP · QUOTA). 시트 숫자를 읽어 판단함
+const SID=Q.get('sid')||'',GRP=Q.get('grp')||'';
+function showClosed(reason){
+  if(reason==='quota'){document.getElementById('closedH').textContent='이번 편지 신청이 모두 마감됐어요';document.getElementById('closedP').innerHTML='준비한 편지가 모두 신청됐어요.<br>관심 가져 주셔서 고마워요.';}
+  go('v-closed');
+}
+// 신청 마감은 랜딩에서 막지 않음 (마감 조회 꺼둠)
+if(false&&CONFIG.SUBMIT_URL){fetch(CONFIG.SUBMIT_URL+'?store_id='+encodeURIComponent(SID)+'&grp='+encodeURIComponent(GRP)+'&store='+encodeURIComponent(DATA.store)).then(r=>r.json()).then(j=>{if(j&&j.closed)showClosed(j.reason);}).catch(()=>{});}
+{const m={call:'패스오더에서 이 카페에 전화하신 적 있는',intro:'패스오더에서 이 카페의 앱 주문을 요청하신'};const src=Q.get('src');document.querySelectorAll('[data-src]').forEach(e=>{e.textContent=m[src]||'패스오더에서 이 카페를 찾으신';});}
+
+function findAddr(){new daum.Postcode({oncomplete:d=>{zip.value=d.zonecode;addr.value=d.roadAddress||d.jibunAddress;addr2.focus();}}).open();}
+
+async function submitForm(){
+  const v=id=>document.getElementById(id).value.trim();
+  const need=[['name','받는 분 이름을 적어 주세요'],['addr','주소 검색으로 받을 곳을 골라 주세요'],['addr2','상세 주소를 적어 주세요']];
+  for(const [k,msg] of need) if(!v(k)){err.textContent=msg;err.hidden=false;document.getElementById(k).focus();return;}
+  if(!agree.checked){err.textContent='동의에 체크해 주세요';err.hidden=false;return;}
+  err.hidden=true;
+  const body={vid:VID,t0:T0.toISOString(),device:DEVICE,app:APP,n:DATA.n,first:DATA.first,ts:new Date().toISOString(),uid:Q.get('uid')||'',sid:SID,grp:GRP,g:Q.get('g')||'',src:Q.get('src')||'',store:DATA.store,nick:v('nick')||DATA.nick,name:v('name'),zip:v('zip'),addr:v('addr'),addr2:v('addr2'),ref:location.href};
+  const btn=document.getElementById('submit');btn.disabled=true;btn.textContent='보내는 중…';
+  try{
+    // text/plain POST는 사전 확인 없이 가고 Apps Script 응답(JSON)을 읽을 수 있음. 마감이면 마감 화면으로
+    if(CONFIG.SUBMIT_URL){
+      const r=await fetch(CONFIG.SUBMIT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(body)});
+      let j=null;try{j=await r.json();}catch(e){}
+      if(j&&j.ok===false){showClosed(j.reason);btn.disabled=false;btn.textContent='편지 신청 완료하기 >';return;}
+    }
+    go('v-done');
+  }catch(e){err.textContent='전송이 안 됐어요. 잠시 후 다시 눌러 주세요';err.hidden=false;}
+  btn.disabled=false;btn.textContent='편지 신청 완료하기 >';
+}
+// 쿠폰 카드: 화면에 들어오면 날아 들어옴
+(function(){
+  const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}}),{threshold:.35});
+  document.querySelectorAll('.cpp').forEach(c=>io.observe(c));
+  // 화면 전환 뒤 완료 화면의 카드도 다시 등장
+  const _go=window.go;window.go=function(id){_go(id);document.querySelectorAll('#'+id+' .cpp').forEach(c=>{c.classList.remove('in');requestAnimationFrame(()=>requestAnimationFrame(()=>io.observe(c)));});};
+})();
+
+</script>
+</body></html>

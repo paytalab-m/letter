@@ -42,7 +42,7 @@ var QUOTA_ALL = 0;                    // 전체 정원. 0이면 안 씀
 var APPLY_GRP_COL = 32;               // 「신청」 AF열 「시험」
 var LETTER_HEAD = ['신청번호', '신청시각', '열쇠', '매장ID', '매장', '닉네임', '발송일', '운송장번호', '도착일', '전달 기한', '문의 기한', '리마인드 발송일', '내 편지 링크', '점주 QR 링크', '메모', '회원ID', '시험', '편지 종류', 'QR 여부'];
 var SCAN_HEAD = ['접속시각', '편지코드', '열쇠', '매장ID', '매장', '손님 전달 기록 있음', '기기', '열린 앱', '유입 URL'];
-var INQ_HEAD = ['접수시각', '편지코드', '열쇠', '매장ID', '매장', '손님 닉네임', '전화번호', '통화 시간대', '매장 첫 문의', '기기', '유입 URL', '처리상태', '첫 통화일', '결과', '성공쿠폰 지급일', '메모', '다시 보냄'];
+var INQ_HEAD = ['접수시각', '편지코드', '열쇠', '매장ID', '매장', '손님 닉네임', '전화번호', '통화 시간대', '매장 첫 문의', '기기', '유입 URL', '처리상태', '첫 통화일', '결과', '성공쿠폰 지급일', '메모', '다시 보냄', '슬랙 알림'];
 var QR_MARK_COL = 16, INQ_MARK_COL = 17; // 「모집대상」 P열 「QR 접속」 · Q열 「사장님 문의」
 // 링크 주소 (정식 계정으로 옮기면 여기 두 줄만 바꾼다)
 var MYLETTER_URL = 'https://paytalab-m.github.io/letter/my-letter/';
@@ -224,15 +224,42 @@ function addScan(d) {
 function addInquiry(d) {
   var sh = sheet('문의', INQ_HEAD);
   var first = d.sid && sh.getRange('D:D').createTextFinder(String(d.sid)).matchEntireCell(true).findNext() ? 'N' : 'Y';
+  var slack = d.type === 'inquiry' ? notifySlack(d, first) : '';
   sh.getRange(sh.getLastRow() + 1, 1, 1, INQ_HEAD.length).setValues([[
     at(d.ts), txt(d.c), txt(d.t), txt(d.sid), txt(d.store), txt(d.nick), txt(d.tel), txt(d.time), first,
-    txt(d.device), txt(d.ref), d.type === 'contact_click' ? 'biz 이동' : '접수', '', '', '', '', d.edit ? 'Y' : ''
+    txt(d.device), txt(d.ref), d.type === 'contact_click' ? 'biz 이동' : '접수', '', '', '', '', d.edit ? 'Y' : '', slack
   ]]);
 }
 
 // 링크 값 → 시트에 적을 글자 (편지 종류 · QR 여부)
 function armLetter(d) { return d.la ? '편지 ' + d.la : ''; }
 function armQr(d) { return d.qr === '1' ? 'QR 있음' : d.qr === '0' ? 'QR 없음' : ''; }
+
+// 점주 전화 안내 신청 → 슬랙 채널 알림 (수신 웹후크). 주소는 공개 저장소에 올리지 않도록 코드가 아니라
+// 프로젝트 설정 → 스크립트 속성 「SLACK_WEBHOOK」에 넣는다. 비어 있으면 보내지 않음
+function notifySlack(d, first) {
+  var url = PropertiesService.getScriptProperties().getProperty('SLACK_WEBHOOK');
+  if (!url) return '';
+  var tel = String(d.tel || '').replace(/\D/g, '').replace(/^(\d{3})(\d{3,4})(\d{4})$/, '$1-$2-$3');
+  var text = ':mailbox: *편지 QR 문의*' + (d.edit ? ' (수정)' : '') + ' :mailbox: ' + [
+    '*매장* ' + (d.store || '-'),
+    '*연락처* ' + (tel || '-'),
+    '*통화 희망* ' + (d.time || '-'),
+    '*편지코드* ' + (d.c || '-'),
+    '*전한 손님* ' + (d.nick || '-'),
+    '*매장 첫 문의* ' + first,
+    '*utm_source* letter | *utm_medium* owner_qr | *utm_campaign* letter_lean_test | *utm_content* ' + (d.c || '-')
+  ].join(' | ');
+  try {
+    var r = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify({ text: text }), muteHttpExceptions: true });
+    return r.getResponseCode() === 200 ? 'Y' : '실패 ' + r.getResponseCode();
+  } catch (err) { return '실패'; }
+}
+
+// 편집기에서 한 번 실행: 외부 요청 권한 승인 + 웹후크 시험 메시지
+function testSlack() {
+  Logger.log(notifySlack({ store: '테스트매장', tel: '01000000000', time: '오전', c: 'TEST-0001', nick: '테스트' }, 'Y'));
+}
 
 // 손님이 입력한 값은 글자로 고정한다 (우편번호 앞자리 0 유지, '='로 시작하는 값이 수식으로 바뀌지 않게)
 function txt(v) { return v === undefined || v === null || v === '' ? '' : "'" + v; }

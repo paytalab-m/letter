@@ -13,7 +13,9 @@
 //   delivered : 「내 편지」에서 「편지 건넸어요」를 눌렀을 때 → 「전달」에 한 줄 추가 + 「모집대상」 전달 기록 Y
 //   letter_view : 「내 편지」를 열었을 때 → 「열람」에 한 줄 추가 + 「모집대상」 내 편지 열람 Y
 //   scan    : 사장님이 편지 QR(점주 페이지)을 열었을 때 → 「QR 접속」에 한 줄 + 「모집대상」 QR 접속 Y
-//   inquiry : 사장님이 전화 안내를 신청했을 때 → 「문의」에 한 줄 + 「모집대상」 사장님 문의 Y
+//   inquiry : 사장님이 전화 안내를 신청했을 때 → 「문의」에 한 줄 + 「모집대상」 사장님 문의 Y (10/23 이전 방식)
+//   contact_click : 사장님이 「안내 신청하기」로 비즈 입점 문의(/contact)에 넘어갈 때 → 「문의」에 처리상태 「biz 이동」으로 한 줄.
+//                   실제 접수는 슬랙 #00랜딩문의알림의 utm_content(= 편지코드)로 확인해 처리상태를 「접수」로 바꾼다
 //
 // 10/23: 모집 · 내 편지는 링크에 값(uid · sid · grp · g · src · store · nick 등)을 넣는 방식, 점주 QR은 편지코드(?c=) 방식.
 //   uid가 오면 「모집대상」에서 그 손님 줄을 찾아 열쇠 · 매장ID를 잇는다(10/15 예전 명단에 있는 손님만).
@@ -77,7 +79,7 @@ function doPost(e) {
   lock.waitLock(10000);
   try {
     if (d.type === 'scan') { addScan(d); markCol(p, QR_MARK_COL); }
-    else if (d.type === 'inquiry') { addInquiry(d); markCol(p, INQ_MARK_COL); }
+    else if (d.type === 'inquiry' || d.type === 'contact_click') { addInquiry(d); markCol(p, INQ_MARK_COL); }
     else if (d.type === 'letter_view') { addLetterView(d); markCol(p, VIEW_MARK_COL); }
     else if (d.type === 'delivered') { addDelivered(d); markCol(p, DELIV_MARK_COL); }
     else if (d.type === 'visit') { addVisit(d); mark(p, 1); }
@@ -224,7 +226,7 @@ function addInquiry(d) {
   var first = d.sid && sh.getRange('D:D').createTextFinder(String(d.sid)).matchEntireCell(true).findNext() ? 'N' : 'Y';
   sh.getRange(sh.getLastRow() + 1, 1, 1, INQ_HEAD.length).setValues([[
     at(d.ts), txt(d.c), txt(d.t), txt(d.sid), txt(d.store), txt(d.nick), txt(d.tel), txt(d.time), first,
-    txt(d.device), txt(d.ref), '접수', '', '', '', '', d.edit ? 'Y' : ''
+    txt(d.device), txt(d.ref), d.type === 'contact_click' ? 'biz 이동' : '접수', '', '', '', '', d.edit ? 'Y' : ''
   ]]);
 }
 

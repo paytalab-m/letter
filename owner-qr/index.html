@@ -423,7 +423,7 @@ html.ld .store,html.ld .nick,html.ld .due{color:transparent!important;background
 <p class="tease">사장님 가게까지 찾아온 손님이<br>주문하지 못하고 떠난다면, 아깝지 않나요?</p>
 </div><div class="gift" style="margin-top:12px"><i><img src="assets/img/gift.png" alt=""></i><span>안내 신청만 하셔도<br>손님들의 소식을 전해 주신<br><b><span class="nick">라떼좋아</span>님</b>께 패스오더가 <span class="nb">감사 쿠폰</span>을 드려요<br><small class="gd"><span class="due">11월 26일</span>까지 신청해 주세요</small></span></div></div>
 </div>
-<div class="bar"><div class="note">궁금한 것만 물어보셔도 돼요</div><button class="btn" onclick="goContact()">안내 신청하기 &gt;</button></div>
+<div class="bar"><div class="note">궁금한 것만 물어보셔도 돼요</div><button class="btn" onclick="openSheet()">안내 신청하기 &gt;</button></div>
 </section>
 
 <!-- 접수 완료 -->
@@ -533,7 +533,7 @@ function fmtTel(el){
   else if(d.length>3)out=d.replace(/(\d{3})(\d{0,4})/,'$1-$2');
   el.value=out;
 }
-// 「안내 신청하기」: 패스오더 비즈 입점 문의(/contact)로 보낸다. 접수되면 영업팀 시스템 · 슬랙 #00랜딩문의알림에 utm_content=편지코드로 찍힘
+// 예비(지금은 안 씀): 슬랙 알림 연결 전 쓰던 방식. 「안내 신청하기」를 패스오더 비즈 입점 문의(/contact)로 보낸다. 접수되면 영업팀 시스템 · 슬랙 #00랜딩문의알림에 utm_content=편지코드로 찍힘
 // 누른 기록은 시트 「문의」 탭에 「biz 이동」으로 남긴다(실제 접수는 슬랙 알림으로 확인)
 const CONTACT_URL='https://biz.passorder.co.kr/contact';
 function goContact(){

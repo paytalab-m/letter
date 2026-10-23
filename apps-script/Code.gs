@@ -55,6 +55,13 @@ function doGet(e) {
     // 점주 페이지: 편지코드로 매장명 · 편지 전한 손님 닉네임 · 문의 기한만 돌려준다
     var lp = letter(q.code);
     if (lp) out = { ok: true, store: lp.store, nick: lp.nick, due: lp.due };
+  } else if (q.closed) {
+    // 모집 명단 채우기(fill_list.py): 신청이 가게당 마감 인원(「마감 관리」 B3) 이상인 가게ID만 돌려준다
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var cap = Number(ss.getSheetByName('마감 관리') ? ss.getSheetByName('마감 관리').getRange('B3').getValue() : 3) || 3;
+    var ap = ss.getSheetByName('신청'), cnt = {};
+    if (ap && ap.getLastRow() > 1) ap.getRange(2, 7, ap.getLastRow() - 1, 1).getValues().forEach(function (r) { var k = String(r[0]); if (k) cnt[k] = (cnt[k] || 0) + 1; });
+    out = { ok: true, cap: cap, sids: Object.keys(cnt).filter(function (k) { return cnt[k] >= cap; }) };
   } else if (q.t) {
     var p = target(q.t);
     if (p) out = { ok: true, store: p.store, nick: p.nick, n: p.n, first: p.first, src: p.src };

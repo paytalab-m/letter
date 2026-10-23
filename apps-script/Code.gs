@@ -166,10 +166,12 @@ function addLetterView(d) {
 function addDelivered(d) {
   var sh = sheet('전달', DELIV_HEAD);
   var applyNo = '';
-  if (d.t) {
-    var hits = sheet('신청', APPLY_HEAD).getRange('F:F').createTextFinder(String(d.t)).matchEntireCell(true).findAll();
+  // 열쇠(F)로 먼저, 없으면 회원ID(E)로 신청번호를 찾는다 (모집대상 밖 회원ID로 신청한 경우)
+  [['F:F', d.t], ['E:E', d.uid]].forEach(function (k) {
+    if (applyNo || !k[1]) return;
+    var hits = sheet('신청', APPLY_HEAD).getRange(k[0]).createTextFinder(String(k[1])).matchEntireCell(true).findAll();
     if (hits.length) applyNo = sheet('신청', APPLY_HEAD).getRange(hits[hits.length - 1].getRow(), 1).getValue();
-  }
+  });
   sh.getRange(sh.getLastRow() + 1, 1, 1, DELIV_HEAD.length).setValues([[
     at(d.ts), txt(d.t), txt(d.uid), txt(d.sid), txt(d.store), txt(d.nick), txt(d.when), txt(d.whom),
     txt(applyNo), txt(d.device), txt(d.app), txt(d.ref), '', '', d.confirm ? 'Y' : ''

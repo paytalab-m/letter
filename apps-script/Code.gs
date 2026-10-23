@@ -278,17 +278,22 @@ function notifySlack(d, first) {
   var i = letterInfo(d.c, d.uid);
   var tel = String(d.tel || '').replace(/\D/g, '').replace(/^(\d{3})(\d{3,4})(\d{4})$/, '$1-$2-$3');
   var exp = (GRP_LABEL[i.grp] || i.grp || '-') + (i.letter ? ' · ' + i.letter : '') + (i.qr ? ' · ' + i.qr : '');
-  var deliv = i.delivAt ? i.delivAt + ' 기록 (건넨 날 ' + (i.when || '-') + ' · 받은 분 ' + (i.whom || '-') + ')' : '아직 「편지 건넸어요」 기록 없음';
-  var lines = [
-    ':mailbox: *편지 QR 문의*' + (d.edit ? ' (연락처 · 시간 수정)' : '') + ' :mailbox:',
-    '*매장* ' + (d.store || '-') + ' (' + (i.sid || d.sid || '-') + ')' + ' | *매장 첫 문의* ' + first,
-    '*연락처* ' + (tel || '-') + ' | *통화 희망* ' + (d.time || '-'),
-    '*편지* ' + exp + ' | *모집 소구* ' + (i.g ? i.g + ' ' + (G_LABEL[i.g] || '') : '-') + ' | *경로* ' + (SRC_LABEL[i.src] || i.src || '-') + ' | *차수* ' + (i.wave || '-'),
-    '*편지 전한 손님* ' + (i.nick || d.nick || '-') + ' (회원ID ' + (i.uid || '-') + ') | *전달* ' + deliv,
-    '*편지코드* ' + (d.c || '-') + ' | *도착일* ' + (i.arrive || '-') + ' | utm_source letter · utm_medium owner_qr · utm_content ' + (d.c || '-')
+  var store = d.store || '-';
+  var f = function (label, value) { return { type: 'mrkdwn', text: '*' + label + '*\n' + (value || '-') }; };
+  var deliv = i.delivAt ? '✅ ' + i.delivAt + ' 기록\n건넨 날 ' + (i.when || '-') + ' · 받은 분 ' + (i.whom || '-') : '⚠️ 아직 기록 없음';
+  // 슬랙 카드: 제목 → 연락할 정보 → 편지 · 모집 정보 → 편지 전한 손님 → 코드. 한 칸에 한 값씩 두 칸 배치
+  var blocks = [
+    { type: 'header', text: { type: 'plain_text', text: '📮 편지 QR 문의' + (d.edit ? ' (연락처 수정)' : '') + ' · ' + store } },
+    { type: 'section', fields: [f('📞 연락처', tel), f('🕑 통화 희망', d.time), f('🏪 매장', store + '\n' + (i.sid || d.sid || '-')), f('🆕 매장 첫 문의', first === 'Y' ? '예' : '아니요 (같은 매장 문의 있음)')] },
+    { type: 'divider' },
+    { type: 'section', fields: [f('✉️ 받은 편지', exp), f('📣 모집 소구', i.g ? i.g + ' · ' + (G_LABEL[i.g] || '') : '-'), f('🧭 손님 경로', SRC_LABEL[i.src] || i.src), f('🔢 차수', i.wave ? i.wave + '차' : '-')] },
+    { type: 'divider' },
+    { type: 'section', fields: [f('🙋 편지 전한 손님', (i.nick || d.nick || '-') + '\n회원ID ' + (i.uid || '-')), f('🤝 전달 기록', deliv)] },
+    { type: 'context', elements: [{ type: 'mrkdwn', text: '편지코드 `' + (d.c || '-') + '` · 도착 ' + (i.arrive || '-') + ' · utm letter / owner_qr / ' + (d.c || '-') }] }
   ];
+  var fallback = '📮 편지 QR 문의 · ' + store + ' · ' + (tel || '-') + ' · ' + (d.time || '-');   // 알림 미리보기 문구
   try {
-    var r = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify({ text: lines.join('\n') }), muteHttpExceptions: true });
+    var r = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify({ text: fallback, blocks: blocks }), muteHttpExceptions: true });
     return r.getResponseCode() === 200 ? 'Y' : '실패 ' + r.getResponseCode();
   } catch (err) { return '실패'; }
 }

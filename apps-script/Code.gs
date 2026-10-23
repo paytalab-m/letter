@@ -235,8 +235,14 @@ function addInquiry(d) {
 function armLetter(d) { return d.la ? '편지 ' + d.la : ''; }
 function armQr(d) { return d.qr === '1' ? 'QR 있음' : d.qr === '0' ? 'QR 없음' : ''; }
 
-// 점주 전화 안내 신청 → 슬랙 #편지_qr_문의 알림 (수신 웹후크). 주소는 공개 저장소에 올리지 않도록 코드가 아니라
-// 프로젝트 설정 → 스크립트 속성 「SLACK_WEBHOOK」에 넣는다. 비어 있으면 보내지 않음
+// 점주 전화 안내 신청 → 슬랙 #편지_qr_문의 알림 (수신 웹후크). 주소는 공개 저장소에 올리지 않도록 코드에 넣지 않고
+// 스크립트 속성 「SLACK_WEBHOOK」, 없으면 시트의 숨김 탭 「설정」 B1에서 읽는다. 둘 다 비어 있으면 보내지 않음
+function slackUrl() {
+  var url = PropertiesService.getScriptProperties().getProperty('SLACK_WEBHOOK');
+  if (url) return url;
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정');
+  return sh ? String(sh.getRange('B1').getValue()).trim() : '';
+}
 // 담는 정보: 매장 · 연락처 · 통화 희망 · 편지(시험 · 편지 종류/QR) · 모집 소구 · 경로 · 차수 · 편지를 전한 손님과 전달 기록
 var G_LABEL = { '1': '내 혜택', '2': '특별 대우', '3': '역할의 재미', '4': '사장님 도움' };
 var GRP_LABEL = { s: '소구 실험', q: 'QR 비교' };
@@ -267,7 +273,7 @@ function letterInfo(code, uid) {
 }
 
 function notifySlack(d, first) {
-  var url = PropertiesService.getScriptProperties().getProperty('SLACK_WEBHOOK');
+  var url = slackUrl();
   if (!url) return '';
   var i = letterInfo(d.c, d.uid);
   var tel = String(d.tel || '').replace(/\D/g, '').replace(/^(\d{3})(\d{3,4})(\d{4})$/, '$1-$2-$3');

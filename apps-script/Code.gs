@@ -235,30 +235,61 @@ function addInquiry(d) {
 function armLetter(d) { return d.la ? '편지 ' + d.la : ''; }
 function armQr(d) { return d.qr === '1' ? 'QR 있음' : d.qr === '0' ? 'QR 없음' : ''; }
 
-// 점주 전화 안내 신청 → 슬랙 채널 알림 (수신 웹후크). 주소는 공개 저장소에 올리지 않도록 코드가 아니라
+// 점주 전화 안내 신청 → 슬랙 #편지_qr_문의 알림 (수신 웹후크). 주소는 공개 저장소에 올리지 않도록 코드가 아니라
 // 프로젝트 설정 → 스크립트 속성 「SLACK_WEBHOOK」에 넣는다. 비어 있으면 보내지 않음
+// 담는 정보: 매장 · 연락처 · 통화 희망 · 편지(시험 · 편지 종류/QR) · 모집 소구 · 경로 · 차수 · 편지를 전한 손님과 전달 기록
+var G_LABEL = { '1': '내 혜택', '2': '특별 대우', '3': '역할의 재미', '4': '사장님 도움' };
+var GRP_LABEL = { s: '소구 실험', q: 'QR 비교' };
+var SRC_LABEL = { call: '전화 주문 손님', intro: '앱 주문 요청 손님' };
+
+function ymd(v, withTime) {
+  return v instanceof Date ? Utilities.formatDate(v, 'Asia/Seoul', withTime ? 'M/d HH:mm' : 'M/d') : String(v || '');
+}
+
+// 편지코드로 편지 · 신청 · 전달 탭에서 알림에 쓸 값을 모은다
+function letterInfo(code, uid) {
+  var o = {};
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var find = function (name, col, v, width) {
+    var sh = ss.getSheetByName(name);
+    if (!sh || !v) return null;
+    var hits = sh.getRange(col + ':' + col).createTextFinder(String(v)).matchEntireCell(true).findAll();
+    if (!hits.length || hits[hits.length - 1].getRow() === 1) return null;
+    return sh.getRange(hits[hits.length - 1].getRow(), 1, 1, width).getValues()[0];
+  };
+  var L = find('편지', 'A', code, LETTER_HEAD.length);
+  if (L) { o.sid = L[3]; o.nick = L[5]; o.arrive = ymd(L[8]); o.uid = uid || L[15]; o.grp = L[16]; o.letter = L[17]; o.qr = L[18]; }
+  var A = find('신청', 'A', code, APPLY_HEAD.length);
+  if (A) { o.g = String(A[7]); o.src = String(A[8]); o.wave = String(A[34]); }
+  var D = find('전달', 'C', o.uid || uid, DELIV_HEAD.length);
+  if (D) { o.delivAt = ymd(D[0], true); o.when = D[6]; o.whom = D[7]; }
+  return o;
+}
+
 function notifySlack(d, first) {
   var url = PropertiesService.getScriptProperties().getProperty('SLACK_WEBHOOK');
   if (!url) return '';
+  var i = letterInfo(d.c, d.uid);
   var tel = String(d.tel || '').replace(/\D/g, '').replace(/^(\d{3})(\d{3,4})(\d{4})$/, '$1-$2-$3');
-  var text = ':mailbox: *편지 QR 문의*' + (d.edit ? ' (수정)' : '') + ' :mailbox: ' + [
-    '*매장* ' + (d.store || '-'),
-    '*연락처* ' + (tel || '-'),
-    '*통화 희망* ' + (d.time || '-'),
-    '*편지코드* ' + (d.c || '-'),
-    '*전한 손님* ' + (d.nick || '-'),
-    '*매장 첫 문의* ' + first,
-    '*utm_source* letter | *utm_medium* owner_qr | *utm_campaign* letter_lean_test | *utm_content* ' + (d.c || '-')
-  ].join(' | ');
+  var exp = (GRP_LABEL[i.grp] || i.grp || '-') + (i.letter ? ' · ' + i.letter : '') + (i.qr ? ' · ' + i.qr : '');
+  var deliv = i.delivAt ? i.delivAt + ' 기록 (건넨 날 ' + (i.when || '-') + ' · 받은 분 ' + (i.whom || '-') + ')' : '아직 「편지 건넸어요」 기록 없음';
+  var lines = [
+    ':mailbox: *편지 QR 문의*' + (d.edit ? ' (연락처 · 시간 수정)' : '') + ' :mailbox:',
+    '*매장* ' + (d.store || '-') + ' (' + (i.sid || d.sid || '-') + ')' + ' | *매장 첫 문의* ' + first,
+    '*연락처* ' + (tel || '-') + ' | *통화 희망* ' + (d.time || '-'),
+    '*편지* ' + exp + ' | *모집 소구* ' + (i.g ? i.g + ' ' + (G_LABEL[i.g] || '') : '-') + ' | *경로* ' + (SRC_LABEL[i.src] || i.src || '-') + ' | *차수* ' + (i.wave || '-'),
+    '*편지 전한 손님* ' + (i.nick || d.nick || '-') + ' (회원ID ' + (i.uid || '-') + ') | *전달* ' + deliv,
+    '*편지코드* ' + (d.c || '-') + ' | *도착일* ' + (i.arrive || '-') + ' | utm_source letter · utm_medium owner_qr · utm_content ' + (d.c || '-')
+  ];
   try {
-    var r = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify({ text: text }), muteHttpExceptions: true });
+    var r = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify({ text: lines.join('\n') }), muteHttpExceptions: true });
     return r.getResponseCode() === 200 ? 'Y' : '실패 ' + r.getResponseCode();
   } catch (err) { return '실패'; }
 }
 
 // 편집기에서 한 번 실행: 외부 요청 권한 승인 + 웹후크 시험 메시지
 function testSlack() {
-  Logger.log(notifySlack({ store: '테스트매장', tel: '01000000000', time: '오전', c: 'TEST-0001', nick: '테스트' }, 'Y'));
+  Logger.log(notifySlack({ store: '테스트매장', tel: '01000000000', time: '오전', c: 'TEST-0001', nick: '테스트', uid: 'TEST' }, 'Y'));
 }
 
 // 손님이 입력한 값은 글자로 고정한다 (우편번호 앞자리 0 유지, '='로 시작하는 값이 수식으로 바뀌지 않게)

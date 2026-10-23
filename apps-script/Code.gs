@@ -76,6 +76,7 @@ function doGet(e) {
 function doPost(e) {
   var d = JSON.parse(e.postData.contents);
   if (!d.c && d.code) d.c = d.code;   // 10/23 점주 페이지는 code로 보냄
+  if (d.store) d.store = String(d.store).replace(/[☎☏✆]|\uD83D[\uDCDE\uDCF1\uDCF2]/g, '').replace(/\s+/g, ' ').trim(); // 매장명의 ☎ 같은 전화 기호 제거
   var lp = d.c ? letter(d.c) : null;
   if (lp) { d.t = lp.t; d.nick = lp.nick; d.store = lp.store; d.sid = lp.sid; d.uid = d.uid || lp.uid; } // 점주 기록은 편지코드로 손님 · 매장을 시트 값으로 잇는다
   var p = target(d.t) || targetByUid(d.uid);

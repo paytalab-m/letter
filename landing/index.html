@@ -315,7 +315,7 @@ const DEVICE=/iPhone|iPad|iPod/.test(UA)?'iOS':/Android/.test(UA)?'Android':'PC'
 const APP=/KAKAOTALK/i.test(UA)?'카카오톡':/NAVER\(inapp/i.test(UA)?'네이버':/Instagram/i.test(UA)?'인스타그램':/FBAN|FBAV/.test(UA)?'페이스북':'일반 브라우저';
 // 방문 기록: 열면 「방문」에 한 줄, 신청 화면으로 넘어가면 도달 단계 갱신. 같은 ID가 신청번호(= 편지코드)가 된다
 const T0=new Date(),VID=('L'+Date.now().toString(36)+Math.random().toString(36).slice(2,5)).toUpperCase();
-function track(o){if(CONFIG.SUBMIT_URL&&Q.get('uid'))fetch(CONFIG.SUBMIT_URL,{method:'POST',mode:'no-cors',keepalive:true,headers:{'Content-Type':'text/plain'},body:JSON.stringify({vid:VID,uid:Q.get('uid')||'',sid:Q.get('sid')||'',grp:Q.get('grp')||'',g:Q.get('g')||'',src:Q.get('src')||'',store:DATA.store,device:DEVICE,app:APP,ref:location.href,ts:new Date().toISOString(),...o})}).catch(()=>{});}
+function track(o){if(CONFIG.SUBMIT_URL&&Q.get('uid'))fetch(CONFIG.SUBMIT_URL,{method:'POST',mode:'no-cors',keepalive:true,headers:{'Content-Type':'text/plain'},body:JSON.stringify({vid:VID,uid:Q.get('uid')||'',sid:Q.get('sid')||'',grp:Q.get('grp')||'',g:Q.get('g')||'',src:Q.get('src')||'',la:Q.get('la')||'',qr:Q.get('qr')||'',w:Q.get('w')||'',store:DATA.store,device:DEVICE,app:APP,ref:location.href,ts:new Date().toISOString(),...o})}).catch(()=>{});}
 track({type:'visit',ts:T0.toISOString()});
 let formSeen=false;
 function go(id){document.querySelectorAll('section').forEach(s=>s.hidden=s.id!==id);window.scrollTo(0,0);if(id==='v-s1'&&!formSeen){formSeen=true;track({type:'step'});}}
@@ -344,7 +344,7 @@ async function submitForm(){
   for(const [k,msg] of need) if(!v(k)){err.textContent=msg;err.hidden=false;document.getElementById(k).focus();return;}
   if(!agree.checked){err.textContent='동의에 체크해 주세요';err.hidden=false;return;}
   err.hidden=true;
-  const body={vid:VID,t0:T0.toISOString(),device:DEVICE,app:APP,n:DATA.n,first:DATA.first,ts:new Date().toISOString(),uid:Q.get('uid')||'',sid:SID,grp:GRP,g:Q.get('g')||'',src:Q.get('src')||'',store:DATA.store,nick:v('nick')||DATA.nick,name:v('name'),zip:v('zip'),addr:v('addr'),addr2:v('addr2'),ref:location.href};
+  const body={vid:VID,t0:T0.toISOString(),device:DEVICE,app:APP,n:DATA.n,first:DATA.first,ts:new Date().toISOString(),uid:Q.get('uid')||'',sid:SID,grp:GRP,g:Q.get('g')||'',src:Q.get('src')||'',la:Q.get('la')||'',qr:Q.get('qr')||'',w:Q.get('w')||'',store:DATA.store,nick:v('nick')||DATA.nick,name:v('name'),zip:v('zip'),addr:v('addr'),addr2:v('addr2'),ref:location.href};
   const btn=document.getElementById('submit');btn.disabled=true;btn.textContent='보내는 중…';
   try{
     // text/plain POST는 사전 확인 없이 가고 Apps Script 응답(JSON)을 읽을 수 있음. 마감이면 마감 화면으로

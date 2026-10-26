@@ -354,15 +354,21 @@ function printOps(d) {
   if (A.getLastRow() > 1) A.getRange(2, 1, A.getLastRow() - 1, 18).getValues().forEach(function (r) {
     addr[String(r[0])] = { name: String(r[14]), zip: String(r[15]), addr: String(r[16]), addr2: String(r[17]) };
   });
+  // 편지 종류별 본문(「편지 문안」 탭 A: 편지 종류, B: 본문)과 가게별 신청 수(QR 안내 「손님 등 N명」)
+  var texts = {}, M = ss.getSheetByName('편지 문안');
+  if (M && M.getLastRow() > 1) M.getRange(2, 1, M.getLastRow() - 1, 2).getValues().forEach(function (r) { if (r[0]) texts[String(r[0])] = String(r[1]); });
+  var per = {};
+  if (A.getLastRow() > 1) A.getRange(2, 7, A.getLastRow() - 1, 1).getValues().forEach(function (r) { var k = String(r[0]); if (k) per[k] = (per[k] || 0) + 1; });
   var round = 0, rows = [];
   lv.forEach(function (r) {
     round = Math.max(round, Number(r[PRINT_ROUND_COL - 1]) || 0);
     if (!r[0] || r[PRINT_DATE_COL - 1]) return;
     var a = addr[String(r[0])] || {};
     rows.push({ code: String(r[0]), store: String(r[4]), nick: String(r[5]), grp: String(r[16]), letter: String(r[17]), qr: String(r[18]),
-      url: String(r[13]), name: a.name || '', zip: a.zip || '', addr: a.addr || '', addr2: a.addr2 || '' });
+      url: String(r[13]), name: a.name || '', zip: a.zip || '', addr: a.addr || '', addr2: a.addr2 || '',
+      sid: String(r[3]), n: per[String(r[3])] || 1 });
   });
-  return { ok: true, rows: rows, round: round + 1 };
+  return { ok: true, rows: rows, round: round + 1, texts: texts };
 }
 
 // 손님이 입력한 값은 글자로 고정한다 (우편번호 앞자리 0 유지, '='로 시작하는 값이 수식으로 바뀌지 않게)

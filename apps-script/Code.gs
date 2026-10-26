@@ -40,7 +40,8 @@ var STORE_CAP = 0;                    // 가게당 인원 마감 (예: 3). 0이�
 var QUOTA = {};                       // 시험별 우편 정원 (예: { s: 1505, q: 801 }). 비우면 안 씀
 var QUOTA_ALL = 0;                    // 전체 정원. 0이면 안 씀
 var APPLY_GRP_COL = 32;               // 「신청」 AF열 「시험」
-var LETTER_HEAD = ['신청번호', '신청시각', '열쇠', '매장ID', '매장', '닉네임', '발송일', '운송장번호', '도착일', '전달 기한', '문의 기한', '리마인드 발송일', '내 편지 링크', '점주 QR 링크', '메모', '회원ID', '시험', '편지 종류', 'QR 여부'];
+var LETTER_HEAD = ['신청번호', '신청시각', '열쇠', '매장ID', '매장', '닉네임', '발송일', '운송장번호', '도착일', '전달 기한', '문의 기한', '리마인드 발송일', '내 편지 링크', '점주 QR 링크', '메모', '회원ID', '시험', '편지 종류', 'QR 여부', '인쇄 회차', '인쇄일'];
+var PRINT_ROUND_COL = 20, PRINT_DATE_COL = 21; // 「편지」 T · U열
 var SCAN_HEAD = ['접속시각', '편지코드', '열쇠', '매장ID', '매장', '손님 전달 기록 있음', '기기', '열린 앱', '유입 URL'];
 var INQ_HEAD = ['접수시각', '편지코드', '열쇠', '매장ID', '매장', '손님 닉네임', '전화번호', '통화 시간대', '매장 첫 문의', '기기', '유입 URL', '처리상태', '첫 통화일', '결과', '성공쿠폰 지급일', '메모', '다시 보냄', '슬랙 알림'];
 var QR_MARK_COL = 16, INQ_MARK_COL = 17; // 「모집대상」 P열 「QR 접속」 · Q열 「사장님 문의」
@@ -75,6 +76,7 @@ function doGet(e) {
 
 function doPost(e) {
   var d = JSON.parse(e.postData.contents);
+  if (d.type === 'print_list' || d.type === 'print_mark') return ContentService.createTextOutput(JSON.stringify(printOps(d))).setMimeType(ContentService.MimeType.JSON);
   if (!d.c && d.code) d.c = d.code;   // 10/23 점주 페이지는 code로 보냄
   if (d.store) d.store = String(d.store).replace(/[☎☏✆]|\uD83D[\uDCDE\uDCF1\uDCF2]/g, '').replace(/\s+/g, ' ').trim(); // 매장명의 ☎ 같은 전화 기호 제거
   var lp = d.c ? letter(d.c) : null;
@@ -94,6 +96,8 @@ function doPost(e) {
     else if (d.type === 'step') { updateVisit(d, '신청화면', FORM_AT_COL); mark(p, 2); }
     else {
       var st = status_(d.sid || '', d.grp || '', d.store || '', d.uid || '');
+      // 같은 방문에서 신청을 두 번 누름(편지코드 = 방문ID가 이미 있음): 회원ID가 없는 접속도 줄을 늘리지 않음
+      if (d.vid && sheet('신청', APPLY_HEAD).getRange('A:A').createTextFinder(String(d.vid)).matchEntireCell(true).findNext()) st.dup = true;
       if (st.dup) res = { ok: true, dup: true };                 // 같은 손님이 같은 가게에 다시 누름: 줄을 늘리지 않음
       else if (st.closed) res = { ok: false, reason: st.reason }; // 마감
       else {
@@ -309,6 +313,41 @@ function notifySlack(d, first) {
 // 편집기에서 한 번 실행: 외부 요청 권한 승인 + 웹후크 시험 메시지
 function testSlack() {
   Logger.log(notifySlack({ store: '테스트매장', tel: '01000000000', time: '오전', c: 'TEST-0001', nick: '테스트', uid: 'TEST' }, 'Y'));
+}
+
+// 편지 인쇄 도구(print_letters.py) 전용. 주소가 오가므로 시트 숨김 탭 「설정」 B2 비밀번호가 맞을 때만 응답
+//   print_list : 아직 인쇄하지 않은(인쇄일 빈칸) 편지 + 신청 탭의 받는 분 · 주소
+//   print_mark : 편지코드 목록에 인쇄 회차 · 인쇄일을 적음
+function printOps(d) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var token = String(ss.getSheetByName('설정').getRange('B2').getValue());
+  if (!token || d.token !== token) return { ok: false, reason: 'token' };
+  var L = ss.getSheetByName('편지');
+  var n = L.getLastRow() - 1;
+  if (n < 1) return { ok: true, rows: [], round: 1 };
+  var lv = L.getRange(2, 1, n, LETTER_HEAD.length).getValues();
+  if (d.type === 'print_mark') {
+    var want = {}; (d.codes || []).forEach(function (c) { want[c] = true; });
+    var today = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd'), cnt = 0;
+    lv.forEach(function (r, i) {
+      if (want[String(r[0])]) { L.getRange(i + 2, PRINT_ROUND_COL, 1, 2).setValues([[d.round, today]]); cnt++; }
+    });
+    return { ok: true, marked: cnt };
+  }
+  var addr = {};
+  var A = ss.getSheetByName('신청');
+  if (A.getLastRow() > 1) A.getRange(2, 1, A.getLastRow() - 1, 18).getValues().forEach(function (r) {
+    addr[String(r[0])] = { name: String(r[14]), zip: String(r[15]), addr: String(r[16]), addr2: String(r[17]) };
+  });
+  var round = 0, rows = [];
+  lv.forEach(function (r) {
+    round = Math.max(round, Number(r[PRINT_ROUND_COL - 1]) || 0);
+    if (!r[0] || r[PRINT_DATE_COL - 1]) return;
+    var a = addr[String(r[0])] || {};
+    rows.push({ code: String(r[0]), store: String(r[4]), nick: String(r[5]), grp: String(r[16]), letter: String(r[17]), qr: String(r[18]),
+      url: String(r[13]), name: a.name || '', zip: a.zip || '', addr: a.addr || '', addr2: a.addr2 || '' });
+  });
+  return { ok: true, rows: rows, round: round + 1 };
 }
 
 // 손님이 입력한 값은 글자로 고정한다 (우편번호 앞자리 0 유지, '='로 시작하는 값이 수식으로 바뀌지 않게)

@@ -519,7 +519,11 @@ if(CODE&&CONFIG.SUBMIT_URL){
 {const d=DATA.due?new Date(DATA.due+'T00:00:00'):new Date(Date.now()+21*864e5);document.querySelectorAll('.due').forEach(e=>e.textContent=(d.getMonth()+1)+'월 '+d.getDate()+'일');}
 document.querySelectorAll('[data-cfg]').forEach(e=>{if(CONFIG[e.dataset.cfg])e.textContent=CONFIG[e.dataset.cfg];});
 document.querySelectorAll('.store').forEach(e=>e.textContent=DATA.store);
-if(CONFIG.SUBMIT_URL&&CODE)fetch(CONFIG.SUBMIT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({type:'scan',ts:new Date().toISOString(),code:DATA.code,store:DATA.store,ref:location.href})}).catch(()=>{});
+// 기기 · 열린 앱(QR을 어떤 카메라 · 앱으로 찍었는지): 손님 페이지와 같은 이름 + 점주용으로 브라우저를 더 나눔
+const UA=navigator.userAgent;
+const DEVICE=/iPhone|iPad|iPod/.test(UA)?'iOS':/Android/.test(UA)?'Android':'PC';
+const APP=/KAKAOTALK/i.test(UA)?'카카오톡':/NAVER\(inapp/i.test(UA)?'네이버':/DaumApps/i.test(UA)?'다음':/Instagram/i.test(UA)?'인스타그램':/FBAN|FBAV/.test(UA)?'페이스북':/BAND\//.test(UA)?'밴드':/Line\//.test(UA)?'라인':/SamsungBrowser/.test(UA)?'삼성 인터넷':/Whale/.test(UA)?'웨일':/EdgA?\//.test(UA)?'엣지':/CriOS|Chrome/.test(UA)?'크롬':/Safari/.test(UA)?'사파리':'기타 브라우저';
+if(CONFIG.SUBMIT_URL&&CODE)fetch(CONFIG.SUBMIT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({type:'scan',ts:new Date().toISOString(),code:DATA.code,store:DATA.store,device:DEVICE,app:APP,ref:location.href})}).catch(()=>{});
 document.querySelectorAll('.nick').forEach(e=>e.textContent=DATA.nick);
 document.querySelectorAll('.n132').forEach(e=>e.textContent=DATA.n_view);
 document.querySelectorAll('.n9').forEach(e=>e.textContent=DATA.n_req);
@@ -539,7 +543,7 @@ const CONTACT_URL='https://biz.passorder.co.kr/contact';
 function goContact(){
   const q=new URLSearchParams({utm_source:'letter',utm_medium:'owner_qr',utm_campaign:'letter_lean_test'});
   if(CODE)q.set('utm_content',CODE);
-  if(CONFIG.SUBMIT_URL&&CODE)fetch(CONFIG.SUBMIT_URL,{method:'POST',mode:'no-cors',keepalive:true,headers:{'Content-Type':'text/plain'},body:JSON.stringify({type:'contact_click',ts:new Date().toISOString(),code:DATA.code,store:DATA.store,ref:location.href})}).catch(()=>{});
+  if(CONFIG.SUBMIT_URL&&CODE)fetch(CONFIG.SUBMIT_URL,{method:'POST',mode:'no-cors',keepalive:true,headers:{'Content-Type':'text/plain'},body:JSON.stringify({type:'contact_click',ts:new Date().toISOString(),code:DATA.code,store:DATA.store,device:DEVICE,app:APP,ref:location.href})}).catch(()=>{});
   setTimeout(()=>{location.href=CONTACT_URL+'?'+q.toString()},150);
 }
 function openSheet(){dim.hidden=false;sheet.hidden=false;setTimeout(()=>tel.focus(),50)}
@@ -551,7 +555,7 @@ function submit(){
   if(!document.getElementById('agree').checked){er.textContent='동의에 체크해 주세요';er.hidden=false;return}
   const tt=document.querySelector('input[name=t]:checked');if(!tt){er.textContent='안내받기 편한 시간을 골라 주세요';er.hidden=false;return}
   const t=tt.value;document.getElementById('tm').textContent=t;document.getElementById('tm2').textContent=t;document.getElementById('telShow').textContent=tel.value;
-  const body={type:'inquiry',edit:window._sent?1:0,ts:new Date().toISOString(),code:DATA.code,store:DATA.store,nick:DATA.nick,tel:v,time:t,ref:location.href};
+  const body={type:'inquiry',edit:window._sent?1:0,ts:new Date().toISOString(),code:DATA.code,store:DATA.store,nick:DATA.nick,tel:v,time:t,device:DEVICE,app:APP,ref:location.href};
   // ponytail: Apps Script는 no-cors라 응답을 못 읽음. 시트 「문의」 탭 + 슬랙 알림(매장 · 시간대 · 편지 코드만, 번호는 시트에만)
   if(CONFIG.SUBMIT_URL&&CODE)fetch(CONFIG.SUBMIT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(body)}).catch(()=>{}); // 편지코드 없는 미리보기는 기록 안 함
   window._sent=1;try{localStorage.setItem('po_inq_'+DATA.code,t);}catch(e){}

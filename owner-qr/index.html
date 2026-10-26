@@ -459,7 +459,8 @@ const seedKey=Q.get('seed')||Q.get('c')||Q.get('store')||'패스카페';
 const R=rng(seedOf(seedKey));
 const num=k=>Q.has(k)&&Q.get(k)!==''&&!isNaN(+Q.get(k))?+Q.get(k):null;
 const _v=num('v')??between(R,...RANGE.view);
-const _r=num('r')??between(R,...RANGE.req);
+const REQ_FIXED=9;   // 요청 손님 수: 테스트 단계는 모든 편지 9명으로 고정(2026-10-26 결정 · 편지 QR 안내 「손님 등 9명」과 같게). 난수는 그대로 한 번 뽑아 다른 숫자가 바뀌지 않게 함
+const _r=num('r')??(between(R,...RANGE.req),REQ_FIXED);
 const _e=num('e')??Math.round(_v*(RANGE.elseRate[0]+R()*(RANGE.elseRate[1]-RANGE.elseRate[0])));
 const DATA={store:Q.get('store')||'패스카페',nick:Q.get('nick')||'라떼좋아',n_view:_v,n_req:_r,n_else:_e,code:Q.get('c')||'L-0001',due:Q.get('due')||''};
 // 요청 손님 카드: 앱 「도입 요청」의 이유 4가지(빠른 픽업 · 적립 · 전화보다 쉬움 · 시간 절약)에서만 고름. 최근 90일 안 날짜, 최신순

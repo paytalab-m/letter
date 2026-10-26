@@ -28,11 +28,11 @@
 // 신청이 들어오면 「편지」 탭에 한 줄이 생기고, 도착일을 적으면 전달 · 문의 기한과 내 편지 · 점주 QR 링크가 자동으로 만들어진다.
 
 var APPLY_HEAD = ['신청번호', '신청시각', '진입시각', '소요시간(초)', '회원ID', '열쇠', '매장ID', '소구', '경로', '매장', '표시 숫자', '첫 참여', '닉네임', '닉네임 변경', '받는 분', '우편번호', '주소', '상세 주소', '기기', '열린 앱', '유입 URL', '요일', '시간대', '중복 신청', '처리상태', '편지 발송일', '운송장번호', '사장님 문의 여부', '참여쿠폰 지급일', '성공쿠폰 지급일', '메모', '시험', '편지 종류', 'QR 여부', '차수'];
-var VISIT_HEAD = ['방문ID', '진입시각', '회원ID', '열쇠', '매장ID', '소구', '경로', '매장', '기기', '열린 앱', '도달 단계', '신청화면 진입시각', '신청시각', '유입 URL', '시험', '차수'];
+var VISIT_HEAD = ['방문ID', '진입시각', '회원ID', '열쇠', '매장ID', '소구', '경로', '매장', '기기', '열린 앱', '도달 단계', '신청화면 진입시각', '신청시각', '유입 URL', '시험', '차수', '들어온 메시지'];
 var DELIV_HEAD = ['기록시각', '열쇠', '회원ID', '매장ID', '매장', '닉네임', '건넨 날', '누구에게', '신청번호', '기기', '열린 앱', '유입 URL', '참여쿠폰 지급일', '메모', '건넨 뒤 체크'];
 var STEP_COL = 11, FORM_AT_COL = 12, APPLY_AT_COL = 13; // 「방문」의 도달 단계 · 신청화면 진입시각 · 신청시각 열
 var DELIV_MARK_COL = 14; // 「모집대상」 N열 「전달 기록」
-var VIEW_HEAD = ['열람시각', '열쇠', '회원ID', '매장ID', '매장', '전달 기한', '이미 기록함', '기기', '열린 앱', '유입 URL'];
+var VIEW_HEAD = ['열람시각', '열쇠', '회원ID', '매장ID', '매장', '전달 기한', '이미 기록함', '기기', '열린 앱', '유입 URL', '들어온 메시지'];
 var VIEW_MARK_COL = 15; // 「모집대상」 O열 「내 편지 열람」
 var STEPS = ['랜딩', '신청화면', '신청완료'];
 // 마감 규칙: 랜딩에서 신청 마감을 막지 않음 (2026-10-23 사용자 결정). 다시 켜려면 숫자를 넣고 새 버전 배포
@@ -40,7 +40,7 @@ var STORE_CAP = 0;                    // 가게당 인원 마감 (예: 3). 0이�
 var QUOTA = {};                       // 시험별 우편 정원 (예: { s: 1505, q: 801 }). 비우면 안 씀
 var QUOTA_ALL = 0;                    // 전체 정원. 0이면 안 씀
 var APPLY_GRP_COL = 32;               // 「신청」 AF열 「시험」
-var LETTER_HEAD = ['신청번호', '신청시각', '열쇠', '매장ID', '매장', '닉네임', '발송일', '운송장번호', '도착일', '전달 기한', '문의 기한', '리마인드 발송일', '내 편지 링크', '점주 QR 링크', '메모', '회원ID', '시험', '편지 종류', 'QR 여부', '인쇄 회차', '인쇄일'];
+var LETTER_HEAD = ['신청번호', '신청시각', '열쇠', '매장ID', '매장', '닉네임', '발송일', '운송장번호', '도착일', '전달 기한', '문의 기한', '리마인드 발송일', '내 편지 링크', '점주 QR 링크', '메모', '회원ID', '시험', '편지 종류', 'QR 여부', '인쇄 회차', '인쇄일', '도착 알림 링크', '리마인드 링크'];
 var PRINT_ROUND_COL = 20, PRINT_DATE_COL = 21; // 「편지」 T · U열
 var SCAN_HEAD = ['접속시각', '편지코드', '열쇠', '매장ID', '매장', '손님 전달 기록 있음', '기기', '열린 앱', '유입 URL'];
 var INQ_HEAD = ['접수시각', '편지코드', '열쇠', '매장ID', '매장', '손님 닉네임', '전화번호', '통화 시간대', '매장 첫 문의', '기기', '유입 URL', '처리상태', '첫 통화일', '결과', '성공쿠폰 지급일', '메모', '다시 보냄', '슬랙 알림'];
@@ -175,7 +175,7 @@ function addLetterView(d) {
   var sh = sheet('열람', VIEW_HEAD);
   sh.getRange(sh.getLastRow() + 1, 1, 1, VIEW_HEAD.length).setValues([[
     at(d.ts), txt(d.t), txt(d.uid), txt(d.sid), txt(d.store), txt(d.due),
-    d.recorded ? 'Y' : 'N', txt(d.device), txt(d.app), txt(d.ref)
+    d.recorded ? 'Y' : 'N', txt(d.device), txt(d.app), txt(d.ref), msgOf(d.ref)
   ]]);
 }
 
@@ -217,7 +217,8 @@ function addLetter(d) {
     '',
     '=IF(P' + r + '="","","' + MYLETTER_URL + '?uid="&ENCODEURL(P' + r + ')&"&store="&ENCODEURL(E' + r + ')&"&nick="&ENCODEURL(F' + r + ')&IF(' + J + '="","","&due="&TEXT(' + J + ',"yyyy-mm-dd"))&IF(G' + r + '="","","&sent="&TEXT(G' + r + ',"yyyy-mm-dd")))',
     '=IF(OR(A' + r + '="",S' + r + '="QR 없음"),"","' + OWNER_URL + '?c="&A' + r + ')',   // QR 없음 가게는 링크 없음
-    '', txt(d.uid), txt(d.grp), armLetter(d), armQr(d)
+    '', txt(d.uid), txt(d.grp), armLetter(d), armQr(d), '', '',
+    myLetterLink(r, 'arr'), myLetterLink(r, 'rmd')
   ]]);
 }
 
@@ -241,6 +242,20 @@ function addInquiry(d) {
     at(d.ts), txt(d.c), txt(d.t), txt(d.sid), txt(d.store), txt(d.nick), txt(d.tel), txt(d.time), first,
     txt(d.device), txt(d.ref), d.type === 'contact_click' ? 'biz 이동' : '접수', '', '', '', '', d.edit ? 'Y' : '', slack
   ]]);
+}
+
+// 도착 · 리마인드 알림톡 버튼에 넣을 내 편지 링크(M열 + 메시지별 UTM). 어느 알림톡으로 열었는지 「열람」 탭에서 갈림
+function myLetterLink(r, kind) {
+  return '=IF(M' + r + '="","",M' + r + '&"&utm_source=kakao&utm_medium=alimtalk&utm_campaign=ltr_' + kind +
+    '&utm_content=ltr_' + kind + '_myletter&utm_term="&IF(Q' + r + '="q","ltr_qrtest","ltr_appeal"))';
+}
+
+// 유입 URL의 utm_content → 들어온 메시지 이름
+var MSG_LABEL = { ltr_arr_myletter: '도착 알림톡', ltr_rmd_myletter: '리마인드 알림톡', ltr_rcr_benefit: '모집 · 내 혜택',
+  ltr_rcr_invite: '모집 · 특별 대우', ltr_rcr_role: '모집 · 역할의 재미', ltr_rcr_help: '모집 · 사장님 도움' };
+function msgOf(ref) {
+  var m = String(ref || '').match(/utm_content=([a-z0-9_]+)/);
+  return m ? (MSG_LABEL[m[1]] || m[1]) : '직접 · 기타';
 }
 
 // 링크 값 → 시트에 적을 글자 (편지 종류 · QR 여부)
@@ -387,7 +402,7 @@ function addVisit(d) {
   var sh = sheet('방문', VISIT_HEAD);
   sh.getRange(sh.getLastRow() + 1, 1, 1, VISIT_HEAD.length).setValues([[
     txt(d.vid), at(d.ts), txt(d.uid), txt(d.t), txt(d.sid), txt(d.g), txt(d.src), txt(d.store),
-    txt(d.device), txt(d.app), '랜딩', '', '', txt(d.ref), txt(d.grp), txt(d.w)
+    txt(d.device), txt(d.app), '랜딩', '', '', txt(d.ref), txt(d.grp), txt(d.w), msgOf(d.ref)
   ]]);
 }
 

@@ -234,19 +234,23 @@ ul.note2.dl{padding:12px 14px 12px 16px}ul.cond.dl{font-weight:400;color:var(--i
 .relink{text-align:center;margin:22px 0 0;font-size:14px}.relink .link2{color:var(--ink2);text-decoration:underline;cursor:pointer}
 .sech b{margin-left:0}
 .lead .store{display:inline!important;font-size:inherit!important;color:inherit!important;margin:0!important;font-weight:inherit}.rfin{margin-top:28px;background:#fff;border:1px solid #F7C9AE;border-radius:16px;padding:18px 16px}.rfin .rf-h{font-size:19px;font-weight:700;letter-spacing:-.02em;margin-bottom:10px}.rfin ul{list-style:none;margin:0;padding:0}.rfin li{display:flex;gap:8px;align-items:center;font-size:15px;line-height:22px;color:var(--ink2);padding:4px 0}.rfin li i{flex:0 0 20px;height:20px;border-radius:50%;background:var(--tint);color:var(--or2);display:flex;align-items:center;justify-content:center}.rfin li i svg{width:13px;height:13px}.qa details{border-top:1px solid var(--line);padding:13px 2px}.qa details:last-of-type{border-bottom:1px solid var(--line)}.qa summary{font-size:15px;font-weight:700;color:var(--ink);cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:10px}.qa summary::-webkit-details-marker{display:none}.qa summary:after{content:"+";color:var(--ink3);font-weight:400}.qa details[open] summary:after{content:"−"}.qa p{margin:8px 0 0;font-size:14.5px;line-height:22px;color:var(--ink2)}.cm .p .t .store{display:inline!important;font-size:inherit!important;color:inherit!important;margin:0!important;font-weight:inherit}.sub2 .nick{display:inline!important;font-size:inherit!important;color:inherit!important;margin:0!important;font-weight:inherit}.cpn-n{margin:10px 0 0!important;text-align:center;font-size:13px!important;line-height:19px!important;color:var(--ink3)!important}.bonus small{display:block;margin-top:4px;font-size:12.5px;line-height:18px;color:var(--ink3)}.sub2 .store{display:inline!important;font-size:inherit!important;color:inherit!important;margin:0!important;font-weight:inherit}.legal{font-size:12.5px!important;line-height:19px!important;color:var(--ink3)!important;margin:6px 0 0 24px!important}.legal .lk{color:var(--ink2);font-weight:600;text-decoration:underline;text-decoration-color:#D9C8B6;text-underline-offset:2px}.pdx{margin:6px 0 0 24px;font-size:12.5px;line-height:19px;color:var(--ink3);text-align:left}.pdx summary{cursor:pointer;list-style:none;color:var(--ink3);text-decoration:underline;text-underline-offset:2px;display:inline-block}.pdx summary::-webkit-details-marker{display:none}.pdx dl{margin:8px 0 0;padding:10px 12px;background:var(--soft,#F6F3EF);border-radius:10px;display:grid;grid-template-columns:auto 1fr;gap:4px 10px}.pdx dt{font-weight:600;color:var(--ink2);white-space:nowrap}.pdx dd{margin:0}.pdx{border:0!important;padding:0!important}.pdx summary{font-size:12.5px!important;font-weight:400!important;line-height:19px!important;color:var(--ink3)!important;padding:0!important;border:0!important}.pdx summary:after,.pdx summary:before{content:none!important}.legal .lk{font-weight:600!important}.wrap .store,.lead .store,.note2 .store{color:var(--or-text,#DC5A12)!important;font-weight:800!important}
+/* 히어로 강조 정리(2026-10-27): 주황은 제목의 매장명 하나만, 나머지 매장명은 본문 색 · 굵기만 */
+.h1 .store{color:var(--or-text,#DC5A12)!important}
+/* 매장명은 중간에서 줄이 바뀌지 않게 한 덩어리로(「매스커피 / 황금점」 방지). 너무 길면 아래 fitStore()가 제목 글씨를 줄임 */
+.store{white-space:nowrap}.lead .store,.sub2 .store,.note2 .store{color:inherit!important;font-weight:inherit!important}
 </style></head><body><div class="wrap">
 
 <!-- ========== 모집 랜딩 ========== -->
 <section id="v-land">
 <div class="nav">패스오더 · 편지 신청</div>
 <div class="pad">
-<div class="h1">다음에 <span class="store">패스카페</span>에 들르실 때,<br>사장님께 편지 한 통을<br><em>건네 주시겠어요?</em></div>
-<p class="lead"><span class="hl">패스오더에도 <span class="store">패스카페</span>를 찾는 손님들이 있어요.</span><br>사장님 가게에 도움이 될 반가운 소식이에요.</p>
+<div class="h1">다음에 <span class="store">패스카페</span>에 들르실 때,<br>사장님께 편지 한 통을<br>건네 주시겠어요?</div>
+<p class="lead"><b>패스오더에도 <span class="store">패스카페</span><span class="j" data-a="을" data-b="를">를</span> 찾는 손님들이 있어요.</b><br>사장님 가게에 도움이 될 반가운 소식이에요.</p>
 <p class="sub2"><span class="store">패스카페</span>에 전달할 편지는 패스오더가 대신 써서 무료로 보내드릴게요!</p>
 
 <div class="sech"><b>이런 쿠폰을 드려요</b></div>
 
-<div class="beat"><div class="cpp"><div class="k a"><img class="bg" src="assets/img/coupon_a_bg.jpg" alt=""><div class="txt"><span class="s">편지를 건네기만 해도</span><div class="v">참여 쿠폰</div><div class="d">사장님 안내 신청이 없어도 드려요</div></div><img class="ic" src="assets/img/coupon_a_icon.png" alt=""></div><div class="k b"><img class="bg" src="assets/img/coupon_b_bg.jpg" alt=""><div class="txt"><span class="s">사장님이 안내 신청하시면</span><div class="v">10,000원</div><div class="d">패스오더에 안내 신청이 오면 드려요</div></div><img class="ic" src="assets/img/coupon_b_icon.png" alt=""></div></div></div>
+<div class="beat"><div class="cpp"><div class="k a"><img class="bg" src="assets/img/coupon_a_bg.png" alt=""><div class="txt"><span class="s">편지를 건네기만 해도</span><div class="v">참여 쿠폰</div><div class="d">사장님 안내 신청이 없어도 드려요</div></div><img class="ic" src="assets/img/coupon_a_icon.png" alt=""></div><div class="k b"><img class="bg" src="assets/img/coupon_b_bg.png" alt=""><div class="txt"><span class="s">사장님이 안내 신청하시면</span><div class="v">10,000원</div><div class="d">패스오더에 안내 신청이 오면 드려요</div></div><img class="ic" src="assets/img/coupon_b_icon.png" alt=""></div></div></div>
 
 
 
@@ -311,6 +315,11 @@ const cleanStore=v=>String(v||'').replace(/[☎☏✆\u{1F4DE}\u{1F4F1}\u{1F4F2}
 const cleanNick=v=>{v=String(v||'').trim();return !v||/@/.test(v)||/01[0-9][- ]?\d{3,4}[- ]?\d{4}/.test(v)||/^[\d\s-]+$/.test(v)?'손님':v;};
 const DATA={store:cleanStore(Q.get('store'))||'패스카페',n:+(Q.get('n')||9),nick:Q.has('nick')?cleanNick(Q.get('nick')):'라떼좋아',first:Q.get('first')!=='0'};
 document.querySelectorAll('.store').forEach(e=>e.textContent=DATA.store);
+// 매장명 뒤 조사(을/를)를 받침에 맞춤: 「매스커피 황금점을」 · 「패스카페를」
+// 매장명이 한 줄에 안 들어가면 그 글 덩어리 글씨를 조금씩 줄여 맞춤(최소 18px)
+function fitStore(){document.querySelectorAll('.h1,.lead,.sub2,.note').forEach(el=>{el.style.fontSize='';el.style.lineHeight='';const w=el.clientWidth;if(!w)return;let fs=parseFloat(getComputedStyle(el).fontSize);const st=[...el.querySelectorAll('.store')];while(fs>18&&st.some(x=>x.getBoundingClientRect().width>w+1)){fs-=1;el.style.fontSize=fs+'px';el.style.lineHeight='1.4';}});}
+fitStore();addEventListener('resize',fitStore);if(document.fonts)document.fonts.ready.then(fitStore);
+document.querySelectorAll('.j').forEach(e=>{const c=(DATA.store||'').trim().slice(-1).charCodeAt(0)-0xAC00;e.textContent=c>=0&&c<11172&&c%28?e.dataset.a:e.dataset.b;});
 document.querySelectorAll('.cnt').forEach(e=>e.textContent=DATA.n);
 function setNick(v){document.querySelectorAll('.nick').forEach(e=>e.textContent=v);}
 const UA=navigator.userAgent;

@@ -67,7 +67,9 @@ function doGet(e) {
     if (ss.getSheetByName('마감 관리')) ss.getSheetByName('마감 관리').getRange('A6:E7').getValues().forEach(function (r) {
       if (r[0]) grp[String(r[0])] = { quota: Number(r[2]) || 0, apps: Number(r[3]) || 0, left: Number(r[4]) || 0 };
     });
-    out = { ok: true, cap: cap, sids: Object.keys(cnt).filter(function (k) { return cnt[k] >= cap; }), groups: grp };
+    // 모집 메시지 #{신청마감일} = 묶음 발송일 + 「마감 관리」 B23일(2026-10-27 결정 · 기본 3일)
+    var rd = ss.getSheetByName('마감 관리') ? Number(ss.getSheetByName('마감 관리').getRange('B23').getValue()) : NaN;
+    out = { ok: true, cap: cap, sids: Object.keys(cnt).filter(function (k) { return cnt[k] >= cap; }), groups: grp, recruit_days: isNaN(rd) || !rd ? 3 : rd };
   } else if (q.t) {
     var p = target(q.t);
     if (p) out = { ok: true, store: p.store, nick: p.nick, n: p.n, first: p.first, src: p.src };

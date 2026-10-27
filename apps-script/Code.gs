@@ -196,11 +196,19 @@ function addLetterView(d) {
 function addDelivered(d) {
   var sh = sheet('전달', DELIV_HEAD);
   var applyNo = '';
-  // 열쇠(F)로 먼저, 없으면 회원ID(E)로 신청번호를 찾는다 (모집대상 밖 회원ID로 신청한 경우)
+  // 열쇠(F)로 먼저, 없으면 회원ID(E)로 신청번호를 찾는다 (모집대상 밖 회원ID로 신청한 경우).
+  // 같은 회원의 신청이 여러 건이면 매장ID(G) · 매장명(J)이 맞는 신청을 고르고, 없을 때만 마지막 신청(2026-10-27 · 시험에서 다른 매장 번호가 붙던 것)
+  var ap = sheet('신청', APPLY_HEAD);
   [['F:F', d.t], ['E:E', d.uid]].forEach(function (k) {
     if (applyNo || !k[1]) return;
-    var hits = sheet('신청', APPLY_HEAD).getRange(k[0]).createTextFinder(String(k[1])).matchEntireCell(true).findAll();
-    if (hits.length) applyNo = sheet('신청', APPLY_HEAD).getRange(hits[hits.length - 1].getRow(), 1).getValue();
+    var hits = ap.getRange(k[0]).createTextFinder(String(k[1])).matchEntireCell(true).findAll();
+    if (!hits.length) return;
+    var pick = hits[hits.length - 1].getRow();
+    for (var i = hits.length - 1; i >= 0; i--) {
+      var r = ap.getRange(hits[i].getRow(), 1, 1, 10).getValues()[0];
+      if ((d.sid && String(r[6]) === String(d.sid)) || (d.store && String(r[9]) === String(d.store))) { pick = hits[i].getRow(); break; }
+    }
+    applyNo = ap.getRange(pick, 1).getValue();
   });
   sh.getRange(sh.getLastRow() + 1, 1, 1, DELIV_HEAD.length).setValues([[
     at(d.ts), txt(d.t), txt(d.uid), txt(d.sid), txt(d.store), txt(d.nick), txt(d.when), txt(d.whom),

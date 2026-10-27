@@ -317,7 +317,15 @@ function letterInfo(code, uid) {
   if (L) { o.sid = L[3]; o.nick = L[5]; o.arrive = ymd(L[8]); o.uid = uid || L[15]; o.grp = L[16]; o.letter = L[17]; o.qr = L[18]; }
   var A = find('신청', 'A', code, APPLY_HEAD.length);
   if (A) { o.g = String(A[7]); o.src = String(A[8]); o.wave = String(A[34]); }
-  var D = find('전달', 'C', o.uid || uid, DELIV_HEAD.length);
+  // 「건넸어요」 기록: 이 편지코드(전달 I열 신청번호)로 먼저 찾고, 없으면 같은 손님 · 같은 매장 기록만(다른 매장 기록이 붙지 않게 · 2026-10-27)
+  var D = find('전달', 'I', code, DELIV_HEAD.length);
+  if (!D && (o.uid || uid)) {
+    var dsh = ss.getSheetByName('전달'), hits = dsh ? dsh.getRange('C:C').createTextFinder(String(o.uid || uid)).matchEntireCell(true).findAll() : [];
+    for (var i = hits.length - 1; i >= 0 && !D; i--) {
+      var r = dsh.getRange(hits[i].getRow(), 1, 1, DELIV_HEAD.length).getValues()[0];
+      if (hits[i].getRow() > 1 && ((o.sid && String(r[3]) === String(o.sid)) || (L && String(r[4]) === String(L[4])))) D = r;
+    }
+  }
   if (D) { o.delivAt = ymd(D[0], true); o.when = D[6]; o.whom = D[7]; }
   return o;
 }

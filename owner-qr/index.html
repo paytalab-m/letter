@@ -370,7 +370,7 @@ html.ld .store,html.ld .nick,html.ld .due{color:transparent!important;background
 
 <section id="main"><div class="pad">
 <!-- 1 앱으로 주문하는 손님들이 찾고 있어요 -->
-<div class="h1">사장님,<br>패스오더로 주문하는 손님들이<br><em><span class="store">패스카페</span>를 찾고 있어요</em></div>
+<div class="h1">사장님,<br>패스오더로 주문하는 손님들이<br><em><span class="store">패스카페</span><span class="j" data-a="을" data-b="를">를</span> 찾고 있어요</em></div>
 <div class="intro"><p>패스오더는 <b class="n1">대한민국 No.1</b> 카페 주문 앱이에요.<br>손님이 미리 주문하고 결제한 뒤,<br><b>매장에서 직접 받아 가요.</b></p></div>
 <div class="stats"><div><b><span class="n132">132</span>명</b><span>패스오더 앱에서<br>찾아봤어요</span></div><div><b><span class="n9">9</span>명</b><span>패스오더 주문을<br>요청했어요</span></div></div>
 
@@ -510,7 +510,11 @@ function renderOwner(){
   const d=DATA.due?new Date(DATA.due+'T00:00:00'):new Date(Date.now()+21*864e5);document.querySelectorAll('.due').forEach(e=>e.textContent=(d.getMonth()+1)+'월 '+d.getDate()+'일');
   document.querySelectorAll('.store').forEach(e=>e.textContent=DATA.store);
   document.querySelectorAll('.nick').forEach(e=>e.textContent=DATA.nick);
+  fixJosa();
 }
+// 매장명 뒤 조사(을/를)를 받침에 맞춤: 「서면본점을」 · 「패스카페를」
+function fixJosa(){document.querySelectorAll('.j').forEach(e=>{const c=(DATA.store||'').trim().slice(-1).charCodeAt(0)-0xAC00;e.textContent=c>=0&&c<11172&&c%28?e.dataset.a:e.dataset.b;});}
+fixJosa();
 if(CODE&&CONFIG.SUBMIT_URL){
   document.documentElement.classList.add('ld');
   const ctl=new AbortController();setTimeout(()=>ctl.abort(),6000);

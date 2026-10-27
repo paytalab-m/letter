@@ -52,7 +52,11 @@ var OWNER_URL = 'https://paytalab-m.github.io/letter/owner-qr/';
 function doGet(e) {
   var q = e.parameter || {};
   var out = { ok: false };
-  if (q.code) { // c는 Apps Script 웹 앱이 예약한 이름이라 조회에는 code를 쓴다
+  if (q.k) {
+    // 짧은 주소(go/?k=코드) → 원래 긴 주소. 메시지 변수 길이 제한 때문에 링크를 줄여 보냄(2026-10-27)
+    var lk = linkOf(q.k);
+    if (lk) out = { ok: true, url: lk };
+  } else if (q.code) { // c는 Apps Script 웹 앱이 예약한 이름이라 조회에는 code를 쓴다
     // 점주 페이지: 편지코드로 매장명 · 편지 전한 손님 닉네임 · 문의 기한만 돌려준다
     var lp = letter(q.code);
     if (lp) out = { ok: true, store: lp.store, nick: lp.nick, due: lp.due };
@@ -85,6 +89,7 @@ function doPost(e) {
   var d = JSON.parse(e.postData.contents);
   if (d.type === 'print_list' || d.type === 'print_mark') return ContentService.createTextOutput(JSON.stringify(printOps(d))).setMimeType(ContentService.MimeType.JSON);
   if (d.type === 'send_list') return ContentService.createTextOutput(JSON.stringify(sendList(d))).setMimeType(ContentService.MimeType.JSON);
+  if (d.type === 'link_put') return ContentService.createTextOutput(JSON.stringify(linkPut(d))).setMimeType(ContentService.MimeType.JSON);
   if (!d.c && d.code) d.c = d.code;   // 10/23 점주 페이지는 code로 보냄
   if (d.store) d.store = String(d.store).replace(/[☎☏✆]|\uD83D[\uDCDE\uDCF1\uDCF2]/g, '').replace(/\s+/g, ' ').trim(); // 매장명의 ☎ 같은 전화 기호 제거
   var lp = d.c ? letter(d.c) : null;
@@ -343,6 +348,31 @@ function notifySlack(d, first) {
 // 편집기에서 한 번 실행: 외부 요청 권한 승인 + 웹후크 시험 메시지
 function testSlack() {
   Logger.log(notifySlack({ store: '테스트매장', tel: '01000000000', time: '오전', c: 'TEST-0001', nick: '테스트', uid: 'TEST' }, 'Y'));
+}
+
+// 짧은 주소 「링크」 탭: A 코드 · B 원래 주소 · C 무엇(모집 1일차 · 도착 알림 등) · D 만든 시각. 수식 없이 값만 씀
+var LINK_HEAD = ['코드', '원래 주소', '무엇', '만든 시각'];
+function linkOf(k) {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('링크');
+  if (!sh || !/^[A-Za-z0-9]{6,16}$/.test(String(k))) return '';
+  var f = sh.getRange('A:A').createTextFinder(String(k)).matchCase(true).matchEntireCell(true).findNext();
+  return f ? String(sh.getRange(f.getRow(), 2).getValue()) : '';
+}
+// 발송 도구(fill_list.py · make_send_files.py)가 코드 · 원래 주소를 올림. 비밀번호는 인쇄 도구와 같은 「설정」 B2
+function linkPut(d) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var token = String(ss.getSheetByName('설정').getRange('B2').getValue());
+  if (!token || d.token !== token) return { ok: false, reason: 'token' };
+  var rows = (d.rows || []).filter(function (r) { return r && /^[A-Za-z0-9]{6,16}$/.test(String(r[0])) && /^https:\/\/paytalab-m\.github\.io\//.test(String(r[1])); });
+  if (!rows.length) return { ok: true, added: 0 };
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var sh = sheet('링크', LINK_HEAD);
+    var now = new Date();
+    sh.getRange(sh.getLastRow() + 1, 1, rows.length, 4).setValues(rows.map(function (r) { return [String(r[0]), String(r[1]), String(r[2] || ''), now]; }));
+  } finally { lock.releaseLock(); }
+  return { ok: true, added: rows.length };
 }
 
 // 메시지 일괄 발송 파일 도구(make_send_files.py) 전용. 「도착 알림 대상」 · 「리마인드 대상」 탭을 보이는 그대로(날짜는 「11월 6일」 꼴) 돌려줌

@@ -62,7 +62,12 @@ function doGet(e) {
     var cap = Number(ss.getSheetByName('마감 관리') ? ss.getSheetByName('마감 관리').getRange('B3').getValue() : 3) || 3;
     var ap = ss.getSheetByName('신청'), cnt = {};
     if (ap && ap.getLastRow() > 1) ap.getRange(2, 7, ap.getLastRow() - 1, 1).getValues().forEach(function (r) { var k = String(r[0]); if (k) cnt[k] = (cnt[k] || 0) + 1; });
-    out = { ok: true, cap: cap, sids: Object.keys(cnt).filter(function (k) { return cnt[k] >= cap; }) };
+    // 그룹별 우편 정원 · 신청 · 남은 정원(「마감 관리」 A6:E7) → 정원이 찬 그룹은 다음 묶음에서 뺌
+    var grp = {};
+    if (ss.getSheetByName('마감 관리')) ss.getSheetByName('마감 관리').getRange('A6:E7').getValues().forEach(function (r) {
+      if (r[0]) grp[String(r[0])] = { quota: Number(r[2]) || 0, apps: Number(r[3]) || 0, left: Number(r[4]) || 0 };
+    });
+    out = { ok: true, cap: cap, sids: Object.keys(cnt).filter(function (k) { return cnt[k] >= cap; }), groups: grp };
   } else if (q.t) {
     var p = target(q.t);
     if (p) out = { ok: true, store: p.store, nick: p.nick, n: p.n, first: p.first, src: p.src };
@@ -77,6 +82,7 @@ function doGet(e) {
 function doPost(e) {
   var d = JSON.parse(e.postData.contents);
   if (d.type === 'print_list' || d.type === 'print_mark') return ContentService.createTextOutput(JSON.stringify(printOps(d))).setMimeType(ContentService.MimeType.JSON);
+  if (d.type === 'send_list') return ContentService.createTextOutput(JSON.stringify(sendList(d))).setMimeType(ContentService.MimeType.JSON);
   if (!d.c && d.code) d.c = d.code;   // 10/23 점주 페이지는 code로 보냄
   if (d.store) d.store = String(d.store).replace(/[☎☏✆]|\uD83D[\uDCDE\uDCF1\uDCF2]/g, '').replace(/\s+/g, ' ').trim(); // 매장명의 ☎ 같은 전화 기호 제거
   var lp = d.c ? letter(d.c) : null;
@@ -206,14 +212,14 @@ function letter(c) {
   return { row: found.getRow(), t: String(r[2]), sid: String(r[3]), store: String(r[4]), nick: String(r[5]), due: due, uid: String(r[15]) };
 }
 
-// 신청 한 건 = 편지 한 통. 도착일(I)을 적으면 기한과 링크가 수식으로 채워진다
+// 신청 한 건 = 편지 한 통. 전달 기한 · 문의 기한은 신청일로 바로 정해지고(마감 관리 B21 · B22), 도착일(I)을 적으면 알림 대상이 된다
 function addLetter(d) {
   var sh = sheet('편지', LETTER_HEAD);
-  var r = sh.getLastRow() + 1, I = 'I' + r, J = 'J' + r;
+  var r = sh.getLastRow() + 1, J = 'J' + r;
   sh.getRange(r, 1, 1, LETTER_HEAD.length).setValues([[
     txt(d.vid), at(d.ts), txt(d.t), txt(d.sid), txt(d.store), txt(d.nick), '', '', '',
-    '=IF(' + I + '="","",' + I + '+14)',   // 손님 전달 기한: 도착 + 14일
-    '=IF(' + I + '="","",' + I + '+21)',   // 사장님 문의 기한: 도착 + 21일 (미정 · 바뀌면 이 숫자만)
+    '=IF(B' + r + '="","",INT(B' + r + ')+N(\'마감 관리\'!$B$21))',   // 손님 전달 기한: 신청일 + 21일(마감 관리 B21, 2026-10-26 결정)
+    '=IF(' + J + '="","",' + J + '+N(\'마감 관리\'!$B$22))',        // 사장님 문의 기한: 전달 기한 + 7일(마감 관리 B22)
     '',
     '=IF(P' + r + '="","","' + MYLETTER_URL + '?uid="&ENCODEURL(P' + r + ')&"&store="&ENCODEURL(E' + r + ')&"&nick="&ENCODEURL(F' + r + ')&IF(' + J + '="","","&due="&TEXT(' + J + ',"yyyy-mm-dd"))&IF(G' + r + '="","","&sent="&TEXT(G' + r + ',"yyyy-mm-dd")))',
     '=IF(OR(A' + r + '="",S' + r + '="QR 없음"),"","' + OWNER_URL + '?c="&A' + r + ')',   // QR 없음 가게는 링크 없음
@@ -276,7 +282,9 @@ var GRP_LABEL = { s: '소구 실험', q: 'QR 비교' };
 var SRC_LABEL = { call: '전화 주문 손님', intro: '앱 주문 요청 손님' };
 
 function ymd(v, withTime) {
-  return v instanceof Date ? Utilities.formatDate(v, 'Asia/Seoul', withTime ? 'M/d HH:mm' : 'M/d') : String(v || '');
+  if (v instanceof Date) return Utilities.formatDate(v, 'Asia/Seoul', withTime ? 'M월 d일 HH:mm' : 'M월 d일');
+  var m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})/);   // 「2026-10-26」 꼴 글자도 같은 표기로
+  return m ? (+m[2]) + '월 ' + (+m[3]) + '일' : String(v || '');
 }
 
 // 편지코드로 편지 · 신청 · 전달 탭에서 알림에 쓸 값을 모은다
@@ -304,23 +312,28 @@ function notifySlack(d, first) {
   if (!url) return '';
   var i = letterInfo(d.c, d.uid);
   var tel = String(d.tel || '').replace(/\D/g, '').replace(/^(\d{3})(\d{3,4})(\d{4})$/, '$1-$2-$3');
-  var exp = (GRP_LABEL[i.grp] || i.grp || '-') + (i.letter ? ' · ' + i.letter : '') + (i.qr ? ' · ' + i.qr : '');
+  var exp = [GRP_LABEL[i.grp] || i.grp, i.letter, i.qr].filter(String).join(', ') || '-';
   var store = d.store || '-';
-  var f = function (label, value) { return { type: 'mrkdwn', text: '*' + label + '*\n' + (value || '-') }; };
-  var deliv = i.delivAt ? '✅ ' + i.delivAt + ' 기록\n건넨 날 ' + (i.when || '-') + ' · 받은 분 ' + (i.whom || '-') : '⚠️ 아직 기록 없음';
-  // 슬랙 카드: 제목 → 연락할 정보 → 편지 · 모집 정보 → 편지 전한 손님 → 코드. 한 칸에 한 값씩 두 칸 배치
-  var blocks = [
-    { type: 'header', text: { type: 'plain_text', text: '📮 편지 QR 문의' + (d.edit ? ' (연락처 수정)' : '') + ' · ' + store } },
-    { type: 'section', fields: [f('📞 연락처', tel), f('🕑 통화 희망', d.time), f('🏪 매장', store + '\n' + (i.sid || d.sid || '-')), f('🆕 매장 첫 문의', first === 'Y' ? '예' : '아니요 (같은 매장 문의 있음)')] },
-    { type: 'divider' },
-    { type: 'section', fields: [f('✉️ 받은 편지', exp), f('📣 모집 소구', i.g ? i.g + ' · ' + (G_LABEL[i.g] || '') : '-'), f('🧭 손님 경로', SRC_LABEL[i.src] || i.src), f('🔢 차수', i.wave ? i.wave + '차' : '-')] },
-    { type: 'divider' },
-    { type: 'section', fields: [f('🙋 편지 전한 손님', (i.nick || d.nick || '-') + '\n회원ID ' + (i.uid || '-')), f('🤝 전달 기록', deliv)] },
-    { type: 'context', elements: [{ type: 'mrkdwn', text: '편지코드 `' + (d.c || '-') + '` · 도착 ' + (i.arrive || '-') + ' · utm letter / owner_qr / ' + (d.c || '-') }] }
-  ];
-  var fallback = '📮 편지 QR 문의 · ' + store + ' · ' + (tel || '-') + ' · ' + (d.time || '-');   // 알림 미리보기 문구
+  // 슬랙 알림: 전화하는 사람이 볼 순서(누구에게 · 언제 → 통화 때 말할 내용 → 분석용 참고). 이모지 없이 「항목: 값」 한 줄에 하나,
+  // 묶음 사이는 빈 줄, 연락처 · 통화 희망만 굵게. 날짜는 「10월 23일」로 통일
+  var lines = [
+    '*편지 QR 문의 · ' + store + (d.edit ? ' (연락처 수정)' : '') + '*',
+    '',
+    '*연락처: ' + (tel || '-') + '*',
+    '*통화 희망: ' + (d.time || '-') + '*',
+    '매장: ' + store + ' (' + (i.sid || d.sid || '-') + ')',
+    '',
+    '편지 전한 손님: ' + (i.nick || d.nick || '-'),
+    '전달 기록: ' + (i.delivAt ? i.delivAt + ' 남김' : '아직 없음'),
+    i.delivAt ? '건넨 날: ' + (ymd(i.when) || '-') + ' / 받은 분: ' + (i.whom || '-') : null,
+    '받은 편지: ' + exp,
+    '',
+    '_참고_',
+    '모집 소구: ' + (i.g ? (G_LABEL[i.g] || i.g) : '-') + ' / 손님 경로: ' + (SRC_LABEL[i.src] || i.src || '-') + ' / 차수: ' + (i.wave ? i.wave + '차' : '-'),
+    '편지 도착: ' + (i.arrive || '-') + ' / 편지코드: ' + (d.c || '-') + ' / 회원ID: ' + (i.uid || '-')
+  ].filter(function (x) { return x !== null; });
   try {
-    var r = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify({ text: fallback, blocks: blocks }), muteHttpExceptions: true });
+    var r = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify({ text: lines.join('\n') }), muteHttpExceptions: true });
     return r.getResponseCode() === 200 ? 'Y' : '실패 ' + r.getResponseCode();
   } catch (err) { return '실패'; }
 }
@@ -328,6 +341,20 @@ function notifySlack(d, first) {
 // 편집기에서 한 번 실행: 외부 요청 권한 승인 + 웹후크 시험 메시지
 function testSlack() {
   Logger.log(notifySlack({ store: '테스트매장', tel: '01000000000', time: '오전', c: 'TEST-0001', nick: '테스트', uid: 'TEST' }, 'Y'));
+}
+
+// 메시지 일괄 발송 파일 도구(make_send_files.py) 전용. 「도착 알림 대상」 · 「리마인드 대상」 탭을 보이는 그대로(날짜는 「11월 6일」 꼴) 돌려줌
+//   send_list : kind = 'arrive' | 'remind'. 비밀번호는 인쇄 도구와 같은 「설정」 B2
+function sendList(d) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var token = String(ss.getSheetByName('설정').getRange('B2').getValue());
+  if (!token || d.token !== token) return { ok: false, reason: 'token' };
+  var name = { arrive: '도착 알림 대상', remind: '리마인드 대상' }[d.kind];
+  var sh = name && ss.getSheetByName(name);
+  if (!sh) return { ok: false, reason: 'kind' };
+  var v = sh.getDataRange().getDisplayValues();
+  var head = v.shift();
+  return { ok: true, head: head, rows: v.filter(function (r) { return r[0] && r[1]; }) };   // 「지금은 대상 없음」 줄은 뺌
 }
 
 // 편지 인쇄 도구(print_letters.py) 전용. 주소가 오가므로 시트 숨김 탭 「설정」 B2 비밀번호가 맞을 때만 응답
@@ -366,7 +393,8 @@ function printOps(d) {
     var a = addr[String(r[0])] || {};
     rows.push({ code: String(r[0]), store: String(r[4]), nick: String(r[5]), grp: String(r[16]), letter: String(r[17]), qr: String(r[18]),
       url: String(r[13]), name: a.name || '', zip: a.zip || '', addr: a.addr || '', addr2: a.addr2 || '',
-      sid: String(r[3]), n: per[String(r[3])] || 1 });
+      sid: String(r[3]), n: per[String(r[3])] || 1,
+      due: r[9] instanceof Date ? Utilities.formatDate(r[9], 'Asia/Seoul', 'yyyy-MM-dd') : '' });   // 손님 안내지 「○월 ○일까지 건네 주세요」 = 전달 기한(신청일 + 21일)
   });
   return { ok: true, rows: rows, round: round + 1, texts: texts };
 }

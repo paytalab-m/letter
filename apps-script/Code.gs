@@ -97,7 +97,7 @@ function doPost(e) {
   var p = target(d.t) || targetByUid(d.uid);
   // 링크에 값이 있으면 링크 값을, 없으면 「모집대상」 값을 쓴다
   if (p) { d.t = d.t || p.t; d.uid = d.uid || p.uid; d.sid = d.sid || p.sid; d.g = d.g || p.g; d.src = d.src || p.src; d.store = d.store || p.store; }
-  var res = { ok: true };
+  var res = { ok: true }, applied = false;
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
@@ -116,11 +116,13 @@ function doPost(e) {
       else {
         if (!d.vid) d.vid = ('L' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5)).toUpperCase();
         addApply(d); addLetter(d); updateVisit(d, '신청완료', APPLY_AT_COL); mark(p, 3);
+        applied = true;
       }
     }
   } finally {
     lock.releaseLock();
   }
+  if (applied) { try { notifyApply(d); } catch (err) {} }   // 슬랙 알림은 잠금 밖에서. 실패해도 신청은 그대로
   return ContentService.createTextOutput(JSON.stringify(res)).setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -285,11 +287,12 @@ function armQr(d) { return d.qr === '1' ? 'QR 있음' : d.qr === '0' ? 'QR 없�
 
 // 점주 전화 안내 신청 → 슬랙 #편지_qr_문의 알림 (수신 웹후크). 주소는 공개 저장소에 올리지 않도록 코드에 넣지 않고
 // 스크립트 속성 「SLACK_WEBHOOK」, 없으면 시트의 숨김 탭 「설정」 B1에서 읽는다. 둘 다 비어 있으면 보내지 않음
-function slackUrl() {
-  var url = PropertiesService.getScriptProperties().getProperty('SLACK_WEBHOOK');
+// 손님 신청 알림(#편지-신청자-알림)은 속성 「SLACK_WEBHOOK_APPLY」, 없으면 「설정」 B3 (B2는 인쇄 도구 비밀번호 · 2026-10-28)
+function slackUrl(prop, cell) {
+  var url = PropertiesService.getScriptProperties().getProperty(prop || 'SLACK_WEBHOOK');
   if (url) return url;
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정');
-  return sh ? String(sh.getRange('B1').getValue()).trim() : '';
+  return sh ? String(sh.getRange(cell || 'B1').getValue()).trim() : '';
 }
 // 담는 정보: 매장 · 연락처 · 통화 희망 · 편지(시험 · 편지 종류/QR) · 모집 소구 · 경로 · 차수 · 편지를 전한 손님과 전달 기록
 var G_LABEL = { '1': '내 혜택', '2': '특별 대우', '3': '역할의 재미', '4': '사장님 도움' };
@@ -359,6 +362,34 @@ function notifySlack(d, first) {
     var r = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify({ text: lines.join('\n') }), muteHttpExceptions: true });
     return r.getResponseCode() === 200 ? 'Y' : '실패 ' + r.getResponseCode();
   } catch (err) { return '실패'; }
+}
+
+// 손님 신청 → 슬랙 #편지-신청자-알림. 받는 분 · 주소 · 우편번호는 넣지 않음. 담당자 확인 링크(utm_term ltr_selftest)로 온 신청은 제목에 표시
+function notifyApply(d) {
+  var url = slackUrl('SLACK_WEBHOOK_APPLY', 'B3');
+  if (!url) return '';
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('신청');
+  var total = sh ? sh.getLastRow() - 1 : 0;
+  var storeN = sh && d.sid ? sh.getRange('G:G').createTextFinder(String(d.sid)).matchEntireCell(true).findAll().length : 0;
+  var self = /utm_term=ltr_selftest/.test(String(d.ref || ''));
+  var store = d.store || '-';
+  var lines = [
+    '*편지 신청 · ' + store + (self ? ' (담당자 확인용)' : '') + '*',
+    '',
+    '손님: ' + (d.nick || '-') + ' / 들어온 메시지: ' + msgOf(d.ref),
+    '받을 편지: ' + ([GRP_LABEL[d.grp] || d.grp, armLetter(d), armQr(d)].filter(String).join(', ') || '-'),
+    '모집 소구: ' + (G_LABEL[d.g] || d.g || '-') + ' / 손님 경로: ' + (SRC_LABEL[d.src] || d.src || '-') + ' / 차수: ' + (d.w ? d.w + '차' : '-'),
+    '',
+    '이 매장 신청: ' + (storeN || 1) + '건째 / 전체 신청: ' + total + '건',
+    '신청번호: ' + (d.vid || '-') + ' / 매장ID: ' + (d.sid || '-')
+  ];
+  var r = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify({ text: lines.join('\n') }), muteHttpExceptions: true });
+  return r.getResponseCode() === 200 ? 'Y' : '실패 ' + r.getResponseCode();
+}
+
+// 편집기에서 한 번 실행: 신청 알림 웹후크 시험 메시지(시트에는 아무것도 적지 않음)
+function testApplySlack() {
+  Logger.log(notifyApply({ store: '테스트매장', nick: '테스트', grp: 's', la: '1', g: '1', src: 'call', w: '1', vid: 'TEST-0001', sid: '', ref: 'utm_content=ltr_rcr_benefit&utm_term=ltr_selftest_b1' }));
 }
 
 // 편집기에서 한 번 실행: 외부 요청 권한 승인 + 웹후크 시험 메시지

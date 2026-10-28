@@ -385,7 +385,7 @@ function notifyApply(d) {
     '모집 소구: ' + (G_LABEL[d.g] || d.g || '-') + ' / 손님 경로: ' + (SRC_LABEL[d.src] || d.src || '-') + ' / 차수: ' + (d.w ? d.w + '차' : '-'),
     '',
     '이 매장 신청: ' + (storeN || 1) + '건째 / 전체 신청: ' + total + '건',
-    '신청번호: ' + (d.vid || '-') + ' / 매장ID: ' + (d.sid || '-')
+    '신청번호: ' + (d.vid || '-') + ' / 매장: ' + store
   ];
   var r = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify({ text: lines.join('\n') }), muteHttpExceptions: true });
   return r.getResponseCode() === 200 ? 'Y' : '실패 ' + r.getResponseCode();

@@ -384,12 +384,12 @@ html.ld .store,html.ld .nick,html.ld .due{color:transparent!important;background
 </div>
 
 <!-- 2 지금 앱에서는 -->
-<div class="sec"><div class="k">지금 패스오더 앱 화면</div><div class="h2">손님들이 <span class="store">패스카페</span>를 찾아왔지만<br><em class="or">주문 버튼이 없어요</em></div>
+<div class="sec"><div class="k">지금 패스오더 앱 화면</div><div class="h2">손님들이 <span class="store">패스카페</span><span class="j" data-a="을" data-b="를">를</span> 찾아왔지만<br><em class="or">주문 버튼이 없어요</em></div>
 <div class="pair one">
 <div class="appc"><div class="chrome"><span>‹</span><b>더보기</b><span></span></div><div class="filt"><span class="on">● 전화매장</span><span>가까운 순 ⌄</span><span>영업 중</span></div><div class="sf"><div class="exm">예시 이미지</div><div class="awn"></div><div class="win"></div><div class="door"></div><div class="board"></div><div class="bg tel">☏ 전화매장</div></div><div class="info"><div class="rc">전화로만 주문</div><div class="nm"><span class="store">패스카페</span></div><div class="meta">📍 136.2m · 걸어서 2분</div><div class="rq">앱으로 주문하고 싶어요 <b class="n9">9</b></div></div><div class="lb">지금 화면 예시</div></div>
 </div>
 <div class="alarm"><p class="mnote"><svg class="sir" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18v-5a6 6 0 0 1 12 0v5" fill="#E5372A"/><rect x="4" y="18" width="16" height="3" rx="1" fill="#B8231A"/><path d="M10 13a2 2 0 0 1 2-2" stroke="#fff" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg>지금은 패스카페에서 <b>패스오더로 주문할 수 없어서,</b><br>손님들이 다른 가게로 넘어가고 있어요</p>
-<div class="lost"><div class="big"><span class="n132">132</span>명</div><div><b><span class="store">패스카페</span>를 찾아본 날,<br>다른 가게에서 주문했어요</b></div></div></div></div>
+<div class="lost"><div class="big"><span class="n132">132</span>명</div><div><b><span class="store">패스카페</span><span class="j" data-a="을" data-b="를">를</span> 찾아본 날,<br>다른 가게에서 주문했어요</b></div></div></div></div>
 
 <!-- 3 이 편지를 받은 사장님께만 -->
 <div class="sec"><div class="k">사장님 가게에서 달라지는 점</div><div class="h2">패스오더를 시작하시면<br>이렇게 달라져요</div>
@@ -515,7 +515,9 @@ function renderOwner(){
 // 손님 닉네임: 사장님이 보는 화면이라 정상이 아닌 닉네임(손님 쪽 「패써」)은 「손님」으로, 뒤의 「님」은 뺌(「손님님」 방지 · 2026-10-28)
 function setNick(){const g=!DATA.nick||DATA.nick==='패써'||DATA.nick==='손님';document.querySelectorAll('.nick').forEach(e=>{e.textContent=g?'손님':DATA.nick;const t=e.nextSibling;if(t&&t.nodeType===3){if(t._o==null)t._o=t.textContent;t.textContent=g&&t._o.startsWith('님')?t._o.slice(1):t._o;}});}
 // 매장명 뒤 조사(을/를)를 받침에 맞춤: 「서면본점을」 · 「패스카페를」
-function fixJosa(){document.querySelectorAll('.j').forEach(e=>{const c=(DATA.store||'').trim().slice(-1).charCodeAt(0)-0xAC00;e.textContent=c>=0&&c<11172&&c%28?e.dataset.a:e.dataset.b;});}
+// 이름 끝 글자에 받침이 있는지(을/를 · 이/가 고르기). 한글은 글자로, 숫자는 읽는 소리로(영·일·삼·육·칠·팔), 영문은 끝소리로, 끝의 괄호 · 점 · 공백은 건너뜀(2026-10-28)
+function hasJong(s){s=String(s||'').trim().replace(/[^0-9A-Za-z가-힣]+$/,'');const ch=s.slice(-1);if(!ch)return false;const c=ch.charCodeAt(0)-0xAC00;if(c>=0&&c<11172)return c%28>0;if(/[0-9]/.test(ch))return '013678'.includes(ch);const w=(s.match(/[A-Za-z]+$/)||[''])[0];if(w.length===1)return /[LMNRlmnr]/.test(w);return /[bgklmnpt]$/i.test(w);}
+function fixJosa(){document.querySelectorAll('.j').forEach(e=>{e.textContent=hasJong(DATA.store)?e.dataset.a:e.dataset.b;});}
 fixJosa();
 if(CODE&&CONFIG.SUBMIT_URL){
   document.documentElement.classList.add('ld');

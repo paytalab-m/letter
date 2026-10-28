@@ -297,7 +297,7 @@ ul.note2.dl{padding:12px 14px 12px 16px}ul.cond.dl{font-weight:400;color:var(--i
 
 <section id="form"><div class="pad">
 <div class="h1">사장님이 미처 듣지 못한<br>손님들의 소식을<br><em>대신 전해 주세요</em></div>
-<p class="lead"><span class="hl">패스오더에도 <span class="store">패스카페</span>를 찾는 손님들이 있어요.</span><br>사장님 가게에 도움이 될 반가운 소식이에요.</p>
+<p class="lead"><span class="hl">패스오더에도 <span class="store">패스카페</span><span class="j" data-a="을" data-b="를">를</span> 찾는 손님들이 있어요.</span><br>사장님 가게에 도움이 될 반가운 소식이에요.</p>
 
 <div class="due"><span><span class="store">패스카페</span>에 <b style="color:var(--ink);font-size:13.5px"><span class="nb">○월 ○일(○)</span></b>까지 건네 주세요</span><b id="left">14일 남았어요</b></div>
 <p class="already">이미 매장에 전달하셨다면 <span class="link2" onclick="openSheet()">전달한 날 남기기</span></p>
@@ -343,6 +343,10 @@ const Q=new URLSearchParams(location.search);
 const DATA={store:Q.get('store')||'패스카페',nick:Q.get('nick')||'라떼좋아',today:Q.get('today')||new Date().toISOString().slice(0,10),due:Q.get('due')||new Date(Date.now()+14*864e5).toISOString().slice(0,10),first:Q.get('first')!=='0',sent:Q.get('sent')||''};
 
 document.querySelectorAll('.store').forEach(e=>e.textContent=DATA.store);
+// 이름 끝 글자에 받침이 있는지(을/를 · 이/가 고르기). 한글은 글자로, 숫자는 읽는 소리로(영·일·삼·육·칠·팔), 영문은 끝소리로, 끝의 괄호 · 점 · 공백은 건너뜀(2026-10-28)
+function hasJong(s){s=String(s||'').trim().replace(/[^0-9A-Za-z가-힣]+$/,'');const ch=s.slice(-1);if(!ch)return false;const c=ch.charCodeAt(0)-0xAC00;if(c>=0&&c<11172)return c%28>0;if(/[0-9]/.test(ch))return '013678'.includes(ch);const w=(s.match(/[A-Za-z]+$/)||[''])[0];if(w.length===1)return /[LMNRlmnr]/.test(w);return /[bgklmnpt]$/i.test(w);}
+function fixJosa(){document.querySelectorAll('.j').forEach(e=>{e.textContent=hasJong(DATA.store)?e.dataset.a:e.dataset.b;});}
+fixJosa();
 document.querySelectorAll('.nick').forEach(e=>e.textContent=DATA.nick);
 // 봉투: 두 줄을 펜으로 적는 것처럼 한 글자씩
 const PEN='<svg class="pen" viewBox="0 0 24 24" fill="none" stroke="#2A2520" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';

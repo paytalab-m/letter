@@ -319,7 +319,10 @@ document.querySelectorAll('.store').forEach(e=>e.textContent=DATA.store);
 // 매장명이 한 줄에 안 들어가면 그 글 덩어리 글씨를 조금씩 줄여 맞춤(최소 18px)
 function fitStore(){document.querySelectorAll('.h1,.lead,.sub2,.note').forEach(el=>{el.style.fontSize='';el.style.lineHeight='';const w=el.clientWidth;if(!w)return;let fs=parseFloat(getComputedStyle(el).fontSize);const st=[...el.querySelectorAll('.store')];while(fs>18&&st.some(x=>x.getBoundingClientRect().width>w+1)){fs-=1;el.style.fontSize=fs+'px';el.style.lineHeight='1.4';}});}
 fitStore();addEventListener('resize',fitStore);if(document.fonts)document.fonts.ready.then(fitStore);
-document.querySelectorAll('.j').forEach(e=>{const c=(DATA.store||'').trim().slice(-1).charCodeAt(0)-0xAC00;e.textContent=c>=0&&c<11172&&c%28?e.dataset.a:e.dataset.b;});
+// 이름 끝 글자에 받침이 있는지(을/를 · 이/가 고르기). 한글은 글자로, 숫자는 읽는 소리로(영·일·삼·육·칠·팔), 영문은 끝소리로, 끝의 괄호 · 점 · 공백은 건너뜀(2026-10-28)
+function hasJong(s){s=String(s||'').trim().replace(/[^0-9A-Za-z가-힣]+$/,'');const ch=s.slice(-1);if(!ch)return false;const c=ch.charCodeAt(0)-0xAC00;if(c>=0&&c<11172)return c%28>0;if(/[0-9]/.test(ch))return '013678'.includes(ch);const w=(s.match(/[A-Za-z]+$/)||[''])[0];if(w.length===1)return /[LMNRlmnr]/.test(w);return /[bgklmnpt]$/i.test(w);}
+function fixJosa(){document.querySelectorAll('.j').forEach(e=>{e.textContent=hasJong(DATA.store)?e.dataset.a:e.dataset.b;});}
+fixJosa();
 document.querySelectorAll('.cnt').forEach(e=>e.textContent=DATA.n);
 function setNick(v){document.querySelectorAll('.nick').forEach(e=>e.textContent=v);}
 const UA=navigator.userAgent;

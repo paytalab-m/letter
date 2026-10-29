@@ -93,6 +93,10 @@ function doPost(e) {
     var ok = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
     return ContentService.createTextOutput(JSON.stringify(ok ? { ok: true, slack: notifyApply({ store: '테스트매장', nick: '테스트', grp: 's', la: '1', g: '1', src: 'call', w: '1', vid: 'TEST-0001', sid: '', ref: 'utm_content=ltr_rcr_benefit&utm_term=ltr_selftest_b1' }) } : { ok: false, reason: 'token' })).setMimeType(ContentService.MimeType.JSON);
   }
+  if (d.type === 'msg_test' || d.type === 'msg_run') {   // 알림톡 시험(uid 한 명에게 견본 값으로) · 지금 한 번 돌리기. 비밀번호 = 「설정」 B2
+    var okM = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
+    return ContentService.createTextOutput(JSON.stringify(!okM ? { ok: false, reason: 'token' } : d.type === 'msg_test' ? msgTest(d.kind, d.uid) : dailyLetterJob())).setMimeType(ContentService.MimeType.JSON);
+  }
   if (d.type === 'track_test' || d.type === 'track_run') {   // 우체국 배달 조회 시험(rgist 한 건, 시트에 안 씀) · 지금 한 번 돌리기. 비밀번호 = 「설정」 B2
     var okT = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
     return ContentService.createTextOutput(JSON.stringify(!okT ? { ok: false, reason: 'token' } : d.type === 'track_test' ? trackOne(d.rgist) : trackArrivals())).setMimeType(ContentService.MimeType.JSON);
@@ -551,7 +555,7 @@ function test() {
 // 「편지」 탭에서 운송장번호(H)가 있고 도착일(I)이 빈 편지를 우체국 국내등기 종적조회 API로 물어,
 // 「배달완료」면 도착일(I)에 배달일자를 적는다 → 「도착 알림 대상」에 자동으로 오른다.
 // 마지막 조회 결과는 Y열 「배송 상태」에 남긴다. 인증키는 「설정」 B4(공공데이터포털 일반 인증키 · 인코딩 안 된 값).
-// 매일 자동: 편집기에서 installTrackTrigger를 한 번 실행(매일 13시 · 19시).
+// 매일 자동: 편집기에서 installTrackTrigger를 한 번 실행(매일 13시 · 19시 dailyLetterJob = 배달 조회 → 도착 · 리마인드 알림톡).
 var TRACK_URL = 'http://openapi.epost.go.kr/trace/retrieveLongitudinalService/retrieveLongitudinalService/getLongitudinalDomesticList';
 var TRACK_COL = 25;   // 「편지」 Y열
 
@@ -605,6 +609,81 @@ function trackArrivals() {
 }
 
 function installTrackTrigger() {   // 편집기에서 한 번만 실행
-  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'trackArrivals') ScriptApp.deleteTrigger(t); });
-  [13, 19].forEach(function (h) { ScriptApp.newTrigger('trackArrivals').timeBased().everyDays(1).atHour(h).inTimezone('Asia/Seoul').create(); });
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (/^(trackArrivals|dailyLetterJob)$/.test(t.getHandlerFunction())) ScriptApp.deleteTrigger(t); });
+  [13, 19].forEach(function (h) { ScriptApp.newTrigger('dailyLetterJob').timeBased().everyDays(1).atHour(h).inTimezone('Asia/Seoul').create(); });
+}
+
+// ── 도착 · 리마인드 알림톡 자동 발송(2026-10-29) ───────────────────────────────
+// 백오피스 메시지 발송 API(POST /messages/send · 마케팅팀 키 「설정」 B5)로 「도착 알림 대상」 · 「리마인드 대상」 탭의 회원에게 보낸다.
+// 보낸 편지는 「편지」 X열(도착 알림 발송일) · L열(리마인드 발송일)에 날짜를 적어 대상에서 빠지게 한다.
+// 「설정」 B6이 Y일 때만 실제로 보냄(아니면 몇 명인지만 슬랙에 알림). 200 응답은 접수일 뿐이라 실제 성공은 백오피스 「발송 내역」에서 확인.
+var MSG_API = 'https://release.passorder.me/messages/send';
+var MSG = {   // 변수 순서 = 백오피스 템플릿 #{} 순서(templates/arrive.xlsx · remind.xlsx)
+  arrive: { code: 'ltr_arr_myletter', tab: '도착 알림 대상', mark: 24, name: '도착 알림톡', vars: function (r) { return [r[1], r[2], r[3], r[4]]; } },   // 닉네임 · 신청일 · 매장명 · 전달기한
+  remind: { code: 'ltr_rmd_myletter', tab: '리마인드 대상', mark: 12, name: '리마인드 알림톡', vars: function (r) { return [r[1], r[3], r[3], r[4]]; } }  // 닉네임 · 매장명 · 매장명 · 전달기한
+};
+
+function setting(cell) {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정');
+  return sh ? String(sh.getRange(cell).getValue()).trim() : '';
+}
+
+// 긴 링크 → 짧은 주소(go/?k=코드, https:// 뺀 꼴 · 템플릿이 https://를 붙임). 「링크」 탭에 적음
+function shortLinks(urls, label) {
+  var abc = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789', rows = [], out = [];
+  urls.forEach(function (u) {
+    var k = ''; for (var i = 0; i < 8; i++) k += abc.charAt(Math.floor(Math.random() * abc.length));
+    rows.push([k, u, label, new Date()]); out.push('paytalab-m.github.io/letter/go/?k=' + k);
+  });
+  if (rows.length) { var sh = sheet('링크', LINK_HEAD); sh.getRange(sh.getLastRow() + 1, 1, rows.length, 4).setValues(rows); }
+  return out;
+}
+
+function msgRequest(uid, vars, link) {
+  return { user_identifier: String(uid), variables: { title: [], content: vars, deep_link: [], replacement_title: [], replacement_content: [],
+    message_addon_element: { pc_link: [link], mobile_link: [link] } } };
+}
+
+function msgPost(code, reqs) {
+  var key = setting('B5');
+  if (!key) return { ok: false, err: 'API 키 없음(설정 B5)' };
+  var res = UrlFetchApp.fetch(MSG_API, { method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+    headers: { Authorization: 'PaytalabAK ' + Utilities.base64Encode(key) },
+    payload: JSON.stringify({ message_code: code, message_requests: reqs }) });
+  var body = res.getContentText();
+  return { ok: res.getResponseCode() === 200, http: res.getResponseCode(), body: body.slice(0, 300) };
+}
+
+// 한 회원에게 견본 값으로 한 통(시트에 날짜를 적지 않음)
+function msgTest(kind, uid) {
+  var m = MSG[kind];
+  if (!m || !uid) return { ok: false, err: 'kind · uid 필요' };
+  var link = shortLinks(['https://paytalab-m.github.io/letter/my-letter/?uid=' + encodeURIComponent(uid) + '&store=' + encodeURIComponent('테스트매장') + '&nick=' + encodeURIComponent('호야')], m.name + ' 시험')[0];
+  return msgPost(m.code, [msgRequest(uid, m.vars(['', '호야', '10월 29일', '테스트매장', '11월 19일']), link)]);
+}
+
+function sendKind(kind, live) {
+  var m = MSG[kind], ss = SpreadsheetApp.getActiveSpreadsheet();
+  var T = ss.getSheetByName(m.tab);
+  if (!T || T.getLastRow() < 2) return { n: 0, sent: 0 };
+  var rows = T.getRange(2, 1, T.getLastRow() - 1, 7).getDisplayValues().filter(function (r) { return r[0] && r[5] && r[6]; });   // 회원ID · 링크 · 편지코드
+  if (!rows.length || !live) return { n: rows.length, sent: 0 };
+  var links = shortLinks(rows.map(function (r) { return r[5]; }), m.name + ' 자동');
+  var res = msgPost(m.code, rows.map(function (r, i) { return msgRequest(r[0], m.vars(r), links[i]); }));
+  if (!res.ok) return { n: rows.length, sent: 0, err: 'HTTP ' + res.http + ' ' + res.body };
+  var L = ss.getSheetByName('편지'), codes = L.getRange(2, 1, L.getLastRow() - 1, 1).getValues(), at = {}, today = new Date();
+  codes.forEach(function (c, i) { at[String(c[0])] = i + 2; });
+  rows.forEach(function (r) { if (at[r[6]]) L.getRange(at[r[6]], m.mark).setValue(today); });
+  return { n: rows.length, sent: rows.length };
+}
+
+function dailyLetterJob() {
+  var tr = trackArrivals();
+  var live = setting('B6').toUpperCase() === 'Y', out = { track: tr, live: live };
+  ['arrive', 'remind'].forEach(function (k) { try { out[k] = sendKind(k, live); } catch (e) { out[k] = { n: 0, sent: 0, err: String(e) }; } });
+  var line = function (k) { var o = out[k]; return MSG[k].name + ' ' + (live ? o.sent + '명 보냄' : o.n + '명 대상(자동 발송 꺼짐 · 설정 B6)') + (o.err ? ' · 실패: ' + o.err : ''); };
+  var text = '*편지 배달 조회 · 알림톡*\n배달 조회 ' + tr.checked + '통 · 오늘 도착 ' + tr.arrived + '통' + (tr.fail ? ' · 조회 실패 ' + tr.fail + '통' : '') +
+    '\n' + line('arrive') + '\n' + line('remind') + (live ? '\n실제 성공 여부는 백오피스 「발송 내역」에서 확인' : '');
+  try { var url = slackUrl('SLACK_WEBHOOK_APPLY', 'B3'); if (url && (tr.checked || out.arrive.n || out.remind.n)) UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify({ text: text }), muteHttpExceptions: true }); } catch (e) {}
+  return out;
 }

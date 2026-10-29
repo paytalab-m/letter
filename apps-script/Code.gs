@@ -42,6 +42,7 @@ var QUOTA_ALL = 0;                    // 전체 정원. 0이면 안 씀
 var APPLY_GRP_COL = 32;               // 「신청」 AF열 「시험」
 var LETTER_HEAD = ['신청번호', '신청시각', '열쇠', '매장ID', '매장', '닉네임', '발송일', '운송장번호', '도착일', '전달 기한', '문의 기한', '리마인드 발송일', '내 편지 링크', '점주 QR 링크', '메모', '회원ID', '시험', '편지 종류', 'QR 여부', '인쇄 회차', '인쇄일', '도착 알림 링크', '리마인드 링크', '도착 알림 발송일'];
 var PRINT_ROUND_COL = 20, PRINT_DATE_COL = 21; // 「편지」 T · U열
+var GUIDE_COL = 26;   // 「편지」 Z열 「안내지 QR 주소」(손님 안내지 QR = 그 손님의 「내 편지」 짧은 주소)
 var SCAN_HEAD = ['접속시각', '편지코드', '열쇠', '매장ID', '매장', '손님 전달 기록 있음', '기기', '열린 앱', '유입 URL'];
 var INQ_HEAD = ['접수시각', '편지코드', '열쇠', '매장ID', '매장', '손님 닉네임', '전화번호', '통화 시간대', '매장 첫 문의', '기기', '유입 URL', '처리상태', '첫 통화일', '결과', '성공쿠폰 지급일', '메모', '다시 보냄', '슬랙 알림'];
 var QR_MARK_COL = 16, INQ_MARK_COL = 17; // 「모집대상」 P열 「QR 접속」 · Q열 「사장님 문의」
@@ -210,7 +211,7 @@ function doPost(e) {
   try {
     if (d.type === 'scan') { addScan(d); markCol(p, QR_MARK_COL); }
     else if (d.type === 'inquiry' || d.type === 'contact_click') { addInquiry(d); markCol(p, INQ_MARK_COL); }
-    else if (d.type === 'letter_view') { addLetterView(d); markCol(p, VIEW_MARK_COL); }
+    else if (d.type === 'letter_view') { addLetterView(d); markCol(p, VIEW_MARK_COL); if (/utm_content=ltr_guide_qr/.test(String(d.ref || ''))) guideArrival(d); }
     else if (d.type === 'delivered') { addDelivered(d); markCol(p, DELIV_MARK_COL); }
     else if (d.type === 'visit') { addVisit(d); mark(p, 1); }
     else if (d.type === 'step') { updateVisit(d, '신청화면', FORM_AT_COL); mark(p, 2); }
@@ -294,6 +295,21 @@ function markCol(p, col) {
 }
 
 // 「내 편지」를 열 때마다 한 줄. 도착 알림톡 · 리마인드 뒤 실제로 열어 봤는지(진단 지표) 보는 용도
+// 손님이 안내지 QR로 「내 편지」에 처음 들어옴 = 편지가 실제로 도착함(2026-10-29).
+// 그 손님 · 매장의 편지 중 도착일(I)이 빈 것에 오늘을 도착일로, 도착 알림 발송일(X)도 오늘로 적어 도착 알림톡은 건너뜀(리마인드는 X 기준으로 그대로 감)
+function guideArrival(d) {
+  var L = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('편지');
+  if (!L || L.getLastRow() < 2 || !d.uid) return;
+  var v = L.getRange(2, 1, L.getLastRow() - 1, 24).getValues(), now = new Date();
+  v.forEach(function (r, i) {
+    if (String(r[15]) !== String(d.uid) || r[8]) return;               // P 회원ID · I 도착일
+    if (d.store && String(r[4]) && String(r[4]) !== String(d.store)) return;   // E 매장(여러 매장 편지면 그 매장만)
+    L.getRange(i + 2, 9).setValue(now);
+    if (!r[23]) L.getRange(i + 2, 24).setValue(now);
+    L.getRange(i + 2, TRACK_COL).setValue('안내지 QR로 도착 확인 · ' + Utilities.formatDate(now, 'Asia/Seoul', 'M/d HH:mm'));
+  });
+}
+
 function addLetterView(d) {
   var sh = sheet('열람', VIEW_HEAD);
   sh.getRange(sh.getLastRow() + 1, 1, 1, VIEW_HEAD.length).setValues([[
@@ -623,14 +639,22 @@ function printOps(d) {
   // 점주 · 직원 의심 회원(숨김 탭 「점주 의심」 A열)의 편지는 인쇄 · 발송하지 않음(2026-10-29 결정)
   var staff = {}, skipped = 0, SU = ss.getSheetByName('점주 의심');
   if (SU && SU.getLastRow() > 1) SU.getRange(2, 1, SU.getLastRow() - 1, 1).getValues().forEach(function (r) { if (r[0]) staff[String(r[0])] = true; });
+  // 손님 안내지 QR = 그 손님의 「내 편지」(M열) + 안내지 표시(utm_content=ltr_guide_qr)를 짧은 주소로. 한 번 만든 주소는 Z열에 두고 다시 씀(2026-10-29)
+  if (!L.getRange(1, GUIDE_COL).getValue()) L.getRange(1, GUIDE_COL).setValue('안내지 QR 주소');
+  var gz = L.getRange(2, GUIDE_COL, n, 1).getValues(), need = [];
+  lv.forEach(function (r, i) { if (r[0] && !r[PRINT_DATE_COL - 1] && !staff[String(r[15])] && r[12] && !gz[i][0]) need.push(i); });
+  if (need.length) {
+    var sl = shortLinks(need.map(function (i) { return String(lv[i][12]) + '&utm_source=letter&utm_medium=guide_qr&utm_content=ltr_guide_qr'; }), '안내지 QR');
+    need.forEach(function (i, k) { gz[i][0] = 'https://' + sl[k]; L.getRange(i + 2, GUIDE_COL).setValue(gz[i][0]); });
+  }
   var round = 0, rows = [];
-  lv.forEach(function (r) {
+  lv.forEach(function (r, i) {
     round = Math.max(round, Number(r[PRINT_ROUND_COL - 1]) || 0);
     if (!r[0] || r[PRINT_DATE_COL - 1]) return;
     if (staff[String(r[15])]) { skipped++; return; }
     var a = addr[String(r[0])] || {};
     rows.push({ code: String(r[0]), store: String(r[4]), nick: String(r[5]), grp: String(r[16]), letter: String(r[17]), qr: String(r[18]),
-      url: String(r[13]), name: a.name || '', zip: a.zip || '', addr: a.addr || '', addr2: a.addr2 || '',
+      url: String(r[13]), guide: String(gz[i][0] || ''), name: a.name || '', zip: a.zip || '', addr: a.addr || '', addr2: a.addr2 || '',
       sid: String(r[3]), n: per[String(r[3])] || 1,
       due: r[9] instanceof Date ? Utilities.formatDate(r[9], 'Asia/Seoul', 'yyyy-MM-dd') : '' });   // 손님 안내지 「○월 ○일까지 건네 주세요」 = 전달 기한(신청일 + 21일)
   });

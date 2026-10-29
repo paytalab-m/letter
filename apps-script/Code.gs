@@ -586,6 +586,7 @@ function trackOne(rgist) {
   var res = UrlFetchApp.fetch(TRACK_URL + '?ServiceKey=' + encodeURIComponent(key) + '&rgist=' + no, { muteHttpExceptions: true });
   var x = res.getContentText();
   var err = tag(x, 'returnAuthMsg') || tag(x, 'errMsg') || (res.getResponseCode() !== 200 ? 'HTTP ' + res.getResponseCode() : '');
+  if (/조회결과가 없/.test(err)) return { ok: true, done: false, day: '', status: '', last: '아직 우체국 조회 안 됨(접수 직후일 수 있음)' };
   if (err && !/NORMAL/.test(err)) return { ok: false, err: err + (tag(x, 'returnReasonCode') ? ' (' + tag(x, 'returnReasonCode') + ')' : '') };
   var status = tag(x, 'dlvySttus'), dlvyDe = tag(x, 'dlvyDe');
   var last = [tag(x, 'dlvyDate'), tag(x, 'dlvyTime'), tag(x, 'nowLc'), tag(x, 'processSttus')].filter(String).join(' ');

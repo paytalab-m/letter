@@ -142,7 +142,8 @@ function doPost(e) {
       var full = String(r[16]) + ' ' + String(r[17]), sn = normName(r[9]), an = normName(full), k = addrKey(r[16]);
       var brand = sn.replace(/(점|본점|직영점)$/, '').slice(0, 4);
       outK.push([String(r[0]), String(r[6]), k ? Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, k, Utilities.Charset.UTF_8).map(function (b) { return ('0' + (b & 255).toString(16)).slice(-2); }).join('').slice(0, 12) : '', brand.length >= 2 && an.indexOf(brand) >= 0 ? 1 : 0,
-        /상가|1층|지하|매장|카페|커피|점\b/.test(full) ? 1 : 0, /아파트|apt|빌라|오피스텔|\d+동\s*\d+호|\d+-\d+호/i.test(full) ? 1 : 0]);
+        /상가|1층|지하|매장|카페|커피|점\b/.test(full) ? 1 : 0, /아파트|apt|빌라|오피스텔|\d+동\s*\d+호|\d+-\d+호/i.test(full) ? 1 : 0,
+        String(r[17]).replace(/\D/g, '') ? sha12(String(r[17]).replace(/\D/g, '')) : '']);   // 상세주소의 숫자만(층 · 호수) 해시 → 매장 상세주소와 비교
     });
     return ContentService.createTextOutput(JSON.stringify({ ok: true, rows: outK })).setMimeType(ContentService.MimeType.JSON);
   }
@@ -701,6 +702,7 @@ var LANDING_TAG = '<@U03UESU9QCV> <@UC4QUTTR7> <@U01BY0S45SN>';   // 정중호 �
 var MATCH_HEAD = ['확인 시각', '문의 시각', '문의 매장', '짝 맞춘 방법', '우리 매장', '댓글', '보냄'];
 
 function normName(s) { return String(s || '').replace(/[^0-9A-Za-z가-힣]/g, '').toLowerCase(); }
+function sha12(s) { return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(s), Utilities.Charset.UTF_8).map(function (b) { return ('0' + (b & 255).toString(16)).slice(-2); }).join('').slice(0, 12); }
 function sameTail(a, b) { var k = 0; while (k < a.length && k < b.length && a[a.length - 1 - k] === b[b.length - 1 - k]) k++; return k; }   // 끝에서부터 같은 글자 수
 function dice(a, b) {   // 두 글자씩 묶은 조각이 얼마나 겹치는지(0~1). 오타 · 한 글자 빠짐에도 높게 나옴
   var g = function (s) { var o = {}; for (var i = 0; i < s.length - 1; i++) { var k = s.substr(i, 2); o[k] = (o[k] || 0) + 1; } return o; };

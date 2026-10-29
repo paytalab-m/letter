@@ -477,17 +477,21 @@ function printOps(d) {
   if (M && M.getLastRow() > 1) M.getRange(2, 1, M.getLastRow() - 1, 2).getValues().forEach(function (r) { if (r[0]) texts[String(r[0])] = String(r[1]); });
   var per = {};
   if (A.getLastRow() > 1) A.getRange(2, 7, A.getLastRow() - 1, 1).getValues().forEach(function (r) { var k = String(r[0]); if (k) per[k] = (per[k] || 0) + 1; });
+  // 점주 · 직원 의심 회원(숨김 탭 「점주 의심」 A열)의 편지는 인쇄 · 발송하지 않음(2026-10-29 결정)
+  var staff = {}, skipped = 0, SU = ss.getSheetByName('점주 의심');
+  if (SU && SU.getLastRow() > 1) SU.getRange(2, 1, SU.getLastRow() - 1, 1).getValues().forEach(function (r) { if (r[0]) staff[String(r[0])] = true; });
   var round = 0, rows = [];
   lv.forEach(function (r) {
     round = Math.max(round, Number(r[PRINT_ROUND_COL - 1]) || 0);
     if (!r[0] || r[PRINT_DATE_COL - 1]) return;
+    if (staff[String(r[15])]) { skipped++; return; }
     var a = addr[String(r[0])] || {};
     rows.push({ code: String(r[0]), store: String(r[4]), nick: String(r[5]), grp: String(r[16]), letter: String(r[17]), qr: String(r[18]),
       url: String(r[13]), name: a.name || '', zip: a.zip || '', addr: a.addr || '', addr2: a.addr2 || '',
       sid: String(r[3]), n: per[String(r[3])] || 1,
       due: r[9] instanceof Date ? Utilities.formatDate(r[9], 'Asia/Seoul', 'yyyy-MM-dd') : '' });   // 손님 안내지 「○월 ○일까지 건네 주세요」 = 전달 기한(신청일 + 21일)
   });
-  return { ok: true, rows: rows, round: round + 1, texts: texts };
+  return { ok: true, rows: rows, round: round + 1, texts: texts, skipped_staff: skipped };
 }
 
 // 손님이 입력한 값은 글자로 고정한다 (우편번호 앞자리 0 유지, '='로 시작하는 값이 수식으로 바뀌지 않게)

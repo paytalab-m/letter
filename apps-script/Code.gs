@@ -133,6 +133,19 @@ function doPost(e) {
     } while (cur && ++guard < (d.pages || 5) && rowsE.length < (d.max || 1000));
     return ContentService.createTextOutput(JSON.stringify({ ok: true, n: rowsE.length, rows: rowsE })).setMimeType(ContentService.MimeType.JSON);
   }
+  if (d.type === 'applicant_addr_keys') {   // 신청 주소가 매장 주소인지 점검용: 신청번호 · 매장ID · 주소키 해시 · 신호만(주소 원문은 돌려주지 않음). 비밀번호 = 「설정」 B2
+    var okK = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
+    if (!okK) return ContentService.createTextOutput(JSON.stringify({ ok: false })).setMimeType(ContentService.MimeType.JSON);
+    var AP = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('신청'), outK = [];
+    AP.getRange(2, 1, AP.getLastRow() - 1, 18).getValues().forEach(function (r) {
+      if (!r[0]) return;
+      var full = String(r[16]) + ' ' + String(r[17]), sn = normName(r[9]), an = normName(full), k = addrKey(r[16]);
+      var brand = sn.replace(/(점|본점|직영점)$/, '').slice(0, 4);
+      outK.push([String(r[0]), String(r[6]), k ? phoneHash(k) : '', brand.length >= 2 && an.indexOf(brand) >= 0 ? 1 : 0,
+        /상가|1층|지하|매장|카페|커피|점\b/.test(full) ? 1 : 0, /아파트|apt|빌라|오피스텔|\d+동\s*\d+호|\d+-\d+호/i.test(full) ? 1 : 0]);
+    });
+    return ContentService.createTextOutput(JSON.stringify({ ok: true, rows: outK })).setMimeType(ContentService.MimeType.JSON);
+  }
   if (d.type === 'landing_scan') {   // 최근 문의 n건을 읽어 이름 · 연락처를 뽑히는지와 짝 맞춘 결과만 셈(댓글 안 씀 · 연락처 값은 돌려주지 않음). 비밀번호 = 「설정」 B2
     var okC = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
     if (!okC) return ContentService.createTextOutput(JSON.stringify({ ok: false, reason: 'token' })).setMimeType(ContentService.MimeType.JSON);

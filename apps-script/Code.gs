@@ -709,7 +709,9 @@ function matchDelivered(name, phone, stores) {
   Object.keys(stores).forEach(function (k) {
     var s = stores[k], m = normName(s.name);
     if (byHash[s.sid]) best = { store: s, how: '연락처' };
-    else if (!best && n && m && (n === m || (Math.min(n.length, m.length) >= 6 && (n.indexOf(m) >= 0 || m.indexOf(n) >= 0)))) best = { store: s, how: '매장 이름' };
+    // 이름: 같거나, 짧은 쪽이 지점명까지(「…점」으로 끝남) 있고 긴 쪽에 들어 있을 때만. 「메가MGC커피」처럼 브랜드만 적은 문의가 다른 지점과 붙지 않게
+    var sh = n.length <= m.length ? n : m, lo = sh === n ? m : n;
+    if (!best && n && m && (n === m || (sh.length >= 6 && /점$/.test(sh) && lo.indexOf(sh) >= 0))) best = { store: s, how: '매장 이름' };
   });
   return best;
 }

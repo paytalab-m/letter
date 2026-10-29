@@ -133,6 +133,10 @@ function doPost(e) {
     } while (cur && ++guard < (d.pages || 5) && rowsE.length < (d.max || 1000));
     return ContentService.createTextOutput(JSON.stringify({ ok: true, n: rowsE.length, rows: rowsE })).setMimeType(ContentService.MimeType.JSON);
   }
+  if (d.type === 'addr_move') {   // 신청번호 목록을 「주소 오류」 탭으로 옮김(신청 · 편지에서 뺌). 비밀번호 = 「설정」 B2
+    var okMv = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
+    return ContentService.createTextOutput(JSON.stringify(okMv ? { ok: true, moved: moveWrongAddr(d.codes, d.reason || '받는 주소 = 매장 주소') } : { ok: false })).setMimeType(ContentService.MimeType.JSON);
+  }
   if (d.type === 'applicant_addr_keys') {   // 신청 주소가 매장 주소인지 점검용: 신청번호 · 매장ID · 주소키 해시 · 신호만(주소 원문은 돌려주지 않음). 비밀번호 = 「설정」 B2
     var okK = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
     if (!okK) return ContentService.createTextOutput(JSON.stringify({ ok: false })).setMimeType(ContentService.MimeType.JSON);
@@ -525,6 +529,45 @@ function sendList(d) {
 // 편지 인쇄 도구(print_letters.py) 전용. 주소가 오가므로 시트 숨김 탭 「설정」 B2 비밀번호가 맞을 때만 응답
 //   print_list : 아직 인쇄하지 않은(인쇄일 빈칸) 편지 + 신청 탭의 받는 분 · 주소
 //   print_mark : 편지코드 목록에 인쇄 회차 · 인쇄일을 적음
+// ── 받는 주소 = 매장 주소인 신청 분리(2026-10-29) ───────────────────────────
+// 손님이 받는 주소에 편지를 보낼 그 매장 주소를 적으면 편지가 사장님께 바로 가서 실험이 깨짐 → 「신청」 · 「편지」에서 빼서 「주소 오류」 탭으로 옮긴다.
+// 판정: 신청 주소의 도로명 + 건물번호 키(addrKey) = 숨김 탭 「편지 매장 주소」의 그 매장 키. 매장 키는 인쇄 묶음 만들 때 Snowflake(sql/05)로 채운다.
+var WRONG_HEAD = ['옮긴 시각', '사유'].concat(APPLY_HEAD);
+
+function moveWrongAddr(codes, reason) {
+  var want = {}; (codes || []).forEach(function (c) { if (c) want[String(c)] = true; });
+  if (!Object.keys(want).length) return 0;
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), A = ss.getSheetByName('신청'), L = ss.getSheetByName('편지'), W = sheet('주소 오류', WRONG_HEAD), moved = 0;
+  var lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    var av = A.getRange(2, 1, A.getLastRow() - 1, APPLY_HEAD.length).getValues(), now = new Date();
+    for (var i = av.length - 1; i >= 0; i--) {   // 아래에서부터 지워야 줄 번호가 안 밀림
+      if (!want[String(av[i][0])]) continue;
+      W.appendRow([now, reason].concat(av[i]));
+      A.deleteRow(i + 2); moved++;
+    }
+    if (L && L.getLastRow() > 1) {
+      var lc = L.getRange(2, 1, L.getLastRow() - 1, 1).getValues();
+      for (var j = lc.length - 1; j >= 0; j--) if (want[String(lc[j][0])]) L.deleteRow(j + 2);
+    }
+  } finally { lock.releaseLock(); }
+  return moved;
+}
+
+// 아직 인쇄하지 않은 신청 중 받는 주소 = 매장 주소인 것을 찾아 옮김. 옮긴 수를 돌려줌
+function screenWrongAddr() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), K = ss.getSheetByName('편지 매장 주소'), A = ss.getSheetByName('신청'), L = ss.getSheetByName('편지');
+  if (!K || K.getLastRow() < 2 || !A || A.getLastRow() < 2) return 0;
+  var key = {}, printed = {}, codes = [];
+  K.getRange(2, 1, K.getLastRow() - 1, 2).getValues().forEach(function (r) { if (r[0] && r[1]) key[String(r[0])] = String(r[1]); });
+  if (L && L.getLastRow() > 1) L.getRange(2, 1, L.getLastRow() - 1, PRINT_DATE_COL).getValues().forEach(function (r) { if (r[PRINT_DATE_COL - 1]) printed[String(r[0])] = true; });
+  A.getRange(2, 1, A.getLastRow() - 1, 18).getValues().forEach(function (r) {
+    var k = addrKey(r[16]), sk = key[String(r[6])];
+    if (r[0] && !printed[String(r[0])] && k && sk && k === sk) codes.push(String(r[0]));
+  });
+  return moveWrongAddr(codes, '받는 주소 = 매장 주소(도로명 · 건물번호 같음)');
+}
+
 function printOps(d) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var token = String(ss.getSheetByName('설정').getRange('B2').getValue());
@@ -541,6 +584,8 @@ function printOps(d) {
     });
     return { ok: true, marked: cnt };
   }
+  var moved = screenWrongAddr();   // 받는 주소가 그 매장 주소인 신청은 인쇄 전에 「주소 오류」 탭으로 옮김(2026-10-29 결정)
+  if (moved) { L = ss.getSheetByName('편지'); n = L.getLastRow() - 1; lv = n > 0 ? L.getRange(2, 1, n, LETTER_HEAD.length).getValues() : []; }
   var addr = {};
   var A = ss.getSheetByName('신청');
   if (A.getLastRow() > 1) A.getRange(2, 1, A.getLastRow() - 1, 18).getValues().forEach(function (r) {

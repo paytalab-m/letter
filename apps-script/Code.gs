@@ -961,23 +961,30 @@ function sendKind(kind, live) {
 }
 
 // ── 예상 도착일(2026-10-29: 준등기는 비용 때문에 안 씀 → 일반 우편) ─────────────────
-// 「편지」 G열 발송일(우체국 접수일)이 있고 도착일(I)이 빈 편지는, 발송일 + 「마감 관리」 B25 영업일(토 · 일 제외, 기본 5 = 일반 우편 D+3 + 여유 2일)이
-// 지나면 도착일에 그 날짜를 적는다 → 「도착 알림 대상」에 올라 도착 알림톡이 나감. Y열에 「예상 도착」으로 남김. 공휴일은 따로 빼지 않음
-function addBizDays(d, n) {
-  var x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  while (n > 0) { x.setDate(x.getDate() + 1); if (x.getDay() !== 0 && x.getDay() !== 6) n--; }
+// 「편지」 G열 발송일(우체국 접수일)이 있고 도착일(I)이 빈 편지는, 발송일 + 「마감 관리」 B25 영업일(기본 4 = 일반 우편 D+3 + 여유 1일)이
+// 지나면 도착일에 그 날짜를 적는다 → 「도착 알림 대상」에 올라 도착 알림톡이 나감. Y열에 「예상 도착」으로 남김.
+// 영업일은 토 · 일 · 공휴일을 뺌. 공휴일은 「마감 관리」 B26(쉼표로 YYYY-MM-DD) + 아래 기본 목록
+var HOLIDAYS = ['2026-12-25', '2027-01-01', '2027-02-08', '2027-02-09', '2027-03-01'];
+function addBizDays(d, n, hol) {
+  var x = new Date(d.getFullYear(), d.getMonth(), d.getDate()), off = {};
+  HOLIDAYS.concat(hol || []).forEach(function (h) { off[String(h).trim()] = true; });
+  while (n > 0) {
+    x.setDate(x.getDate() + 1);
+    if (x.getDay() !== 0 && x.getDay() !== 6 && !off[Utilities.formatDate(x, 'Asia/Seoul', 'yyyy-MM-dd')]) n--;
+  }
   return x;
 }
 
 function predictArrivals() {
   var ss = SpreadsheetApp.getActiveSpreadsheet(), L = ss.getSheetByName('편지');
   if (!L || L.getLastRow() < 2) return { predicted: 0 };
-  var days = Number(ss.getSheetByName('마감 관리').getRange('B25').getValue()) || 5;
+  var MG = ss.getSheetByName('마감 관리'), days = Number(MG.getRange('B25').getValue()) || 4;
+  var hol = String(MG.getRange('B26').getDisplayValue() || '').split(/[,\s]+/).filter(String);
   if (!L.getRange(1, TRACK_COL).getValue()) L.getRange(1, TRACK_COL).setValue('배송 상태');
   var n = L.getLastRow() - 1, v = L.getRange(2, 7, n, 3).getValues(), today = new Date(), cnt = 0;   // G 발송일 · H 운송장 · I 도착일
   for (var i = 0; i < n; i++) {
     if (!(v[i][0] instanceof Date) || v[i][2]) continue;
-    var due = addBizDays(v[i][0], days);
+    var due = addBizDays(v[i][0], days, hol);
     if (today < due) continue;
     L.getRange(i + 2, 9).setValue(due);
     L.getRange(i + 2, TRACK_COL).setValue('예상 도착 ' + Utilities.formatDate(due, 'Asia/Seoul', 'M/d') + ' (발송일 + ' + days + '영업일)');

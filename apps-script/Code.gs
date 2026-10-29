@@ -97,6 +97,35 @@ function doPost(e) {
     var okM = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
     return ContentService.createTextOutput(JSON.stringify(!okM ? { ok: false, reason: 'token' } : d.type === 'msg_test' ? msgTest(d.kind, d.uid) : dailyLetterJob())).setMimeType(ContentService.MimeType.JSON);
   }
+  if (d.type === 'slack_check') {   // 봇 토큰(설정 B7) 점검: 권한 목록 · 채널 읽기 되는지(토큰 값은 돌려주지 않음). 비밀번호 = 「설정」 B2
+    var okS = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
+    if (!okS) return ContentService.createTextOutput(JSON.stringify({ ok: false, reason: 'token' })).setMimeType(ContentService.MimeType.JSON);
+    var bt = setting('B7'), out = { has_token: !!bt, kind: bt.slice(0, 5) };
+    if (bt) {
+      var ar = UrlFetchApp.fetch('https://slack.com/api/auth.test', { method: 'post', headers: { Authorization: 'Bearer ' + bt }, muteHttpExceptions: true });
+      var aj = JSON.parse(ar.getContentText()), hd = ar.getHeaders();
+      out.auth = { ok: aj.ok, error: aj.error, team: aj.team, bot: aj.user };
+      out.scopes = hd['x-oauth-scopes'] || hd['X-OAuth-Scopes'] || '';
+      var hj = slackApi('conversations.history', { channel: LANDING_CH, limit: 1 });
+      out.history = { ok: hj.ok, error: hj.error, needed: hj.needed };
+    }
+    return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
+  }
+  if (d.type === 'landing_scan') {   // 최근 문의 n건을 읽어 이름 · 연락처를 뽑히는지와 짝 맞춘 결과만 셈(댓글 안 씀 · 연락처 값은 돌려주지 않음). 비밀번호 = 「설정」 B2
+    var okC = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
+    if (!okC) return ContentService.createTextOutput(JSON.stringify({ ok: false, reason: 'token' })).setMimeType(ContentService.MimeType.JSON);
+    var hs = slackApi('conversations.history', { channel: LANDING_CH, limit: d.n || 20 }), sto = deliveredStores(), sc = { read: 0, parsed: 0, phone: 0, matched: 0, names: [] };
+    (hs.messages || []).forEach(function (m) {
+      sc.read++;
+      var q = parseLanding(m.text);
+      if (!q) return;
+      sc.parsed++; if (phoneHash(q.phone)) sc.phone++;
+      if (sc.names.length < 5) sc.names.push(q.name);
+      if (matchDelivered(q.name, q.phone, sto)) sc.matched++;
+    });
+    sc.ok = hs.ok; sc.error = hs.error; sc.delivered_stores = Object.keys(sto).length;
+    return ContentService.createTextOutput(JSON.stringify(sc)).setMimeType(ContentService.MimeType.JSON);
+  }
   if (d.type === 'landing_test') {   // 랜딩 문의 댓글 미리 보기(슬랙에 안 씀): 견본 매장 댓글 + 실제 전달 매장과 짝 맞춘 결과. 비밀번호 = 「설정」 B2
     var okL = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
     if (!okL) return ContentService.createTextOutput(JSON.stringify({ ok: false, reason: 'token' })).setMimeType(ContentService.MimeType.JSON);

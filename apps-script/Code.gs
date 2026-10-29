@@ -671,6 +671,13 @@ var LANDING_TAG = '<@U03UESU9QCV> <@UC4QUTTR7> <@U01BY0S45SN>';   // 정중호 �
 var MATCH_HEAD = ['확인 시각', '문의 시각', '문의 매장', '짝 맞춘 방법', '우리 매장', '댓글', '보냄'];
 
 function normName(s) { return String(s || '').replace(/[^0-9A-Za-z가-힣]/g, '').toLowerCase(); }
+function sameTail(a, b) { var k = 0; while (k < a.length && k < b.length && a[a.length - 1 - k] === b[b.length - 1 - k]) k++; return k; }   // 끝에서부터 같은 글자 수
+function dice(a, b) {   // 두 글자씩 묶은 조각이 얼마나 겹치는지(0~1). 오타 · 한 글자 빠짐에도 높게 나옴
+  var g = function (s) { var o = {}; for (var i = 0; i < s.length - 1; i++) { var k = s.substr(i, 2); o[k] = (o[k] || 0) + 1; } return o; };
+  var A = g(a), B = g(b), hit = 0;
+  Object.keys(A).forEach(function (k) { if (B[k]) hit += Math.min(A[k], B[k]); });
+  return 2 * hit / Math.max(1, a.length - 1 + b.length - 1);
+}
 function md(v) {   // 「11월 14일」
   var d = v instanceof Date ? v : (/^\d{4}-\d{1,2}-\d{1,2}/.test(String(v)) ? new Date(String(v).slice(0, 10) + 'T00:00:00+09:00') : null);
   return d && !isNaN(d) ? Utilities.formatDate(d, 'Asia/Seoul', 'M월 d일') : String(v || '');
@@ -712,6 +719,10 @@ function matchDelivered(name, phone, stores) {
     // 이름: 같거나, 짧은 쪽이 지점명까지(「…점」으로 끝남) 있고 긴 쪽에 들어 있을 때만. 「메가MGC커피」처럼 브랜드만 적은 문의가 다른 지점과 붙지 않게
     var sh = n.length <= m.length ? n : m, lo = sh === n ? m : n;
     if (!best && n && m && (n === m || (sh.length >= 6 && /점$/.test(sh) && lo.indexOf(sh) >= 0))) best = { store: s, how: '매장 이름' };
+    // 비슷한 이름(오타 · 한두 글자 차이): 앞 2글자(브랜드)가 같고 두 글자씩 묶어 비교한 겹침이 0.8 이상, 둘 다 6자 이상
+    else if (!best && n.length >= 6 && m.length >= 6 && n.slice(0, 2) === m.slice(0, 2) && dice(n, m) >= 0.8) best = { store: s, how: '비슷한 매장 이름' };
+    // 브랜드를 줄여 씀(메가커피 ↔ 메가MGC커피): 앞 2글자가 같고 끝의 지점명이 5글자 이상(「…점」 포함) 똑같을 때
+    else if (!best && n.slice(0, 2) === m.slice(0, 2) && /점$/.test(n) && sameTail(n, m) >= 5) best = { store: s, how: '지점명' };
   });
   return best;
 }

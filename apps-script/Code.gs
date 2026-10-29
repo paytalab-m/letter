@@ -97,6 +97,15 @@ function doPost(e) {
     var okM = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
     return ContentService.createTextOutput(JSON.stringify(!okM ? { ok: false, reason: 'token' } : d.type === 'msg_test' ? msgTest(d.kind, d.uid) : dailyLetterJob())).setMimeType(ContentService.MimeType.JSON);
   }
+  if (d.type === 'landing_test') {   // 랜딩 문의 댓글 미리 보기(슬랙에 안 씀): 견본 매장 댓글 + 실제 전달 매장과 짝 맞춘 결과. 비밀번호 = 「설정」 B2
+    var okL = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
+    if (!okL) return ContentService.createTextOutput(JSON.stringify({ ok: false, reason: 'token' })).setMimeType(ContentService.MimeType.JSON);
+    var st = deliveredStores(), mt = matchDelivered(d.name, d.phone, st);
+    var one = { name: '견본매장', hand: [{ nick: '라떼좋아', day: '2026-11-14', at: '2026-11-14' }], qr: new Date('2026-11-15T10:00:00+09:00') };
+    var two = { name: '견본매장', hand: [{ nick: '라떼좋아', day: '2026-11-14', at: '2026-11-14' }, { nick: '아침한잔', day: '2026-11-16', at: '2026-11-16' }], qr: null };
+    return ContentService.createTextOutput(JSON.stringify({ ok: true, delivered_stores: Object.keys(st).length, match: mt ? { how: mt.how, store: mt.store.name } : null,
+      sample_one: landingComment(one), sample_two: landingComment(two) })).setMimeType(ContentService.MimeType.JSON);
+  }
   if (d.type === 'track_test' || d.type === 'track_run') {   // 우체국 배달 조회 시험(rgist 한 건, 시트에 안 씀) · 지금 한 번 돌리기. 비밀번호 = 「설정」 B2
     var okT = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
     return ContentService.createTextOutput(JSON.stringify(!okT ? { ok: false, reason: 'token' } : d.type === 'track_test' ? trackOne(d.rgist) : trackArrivals())).setMimeType(ContentService.MimeType.JSON);
@@ -614,8 +623,110 @@ function trackArrivals() {
 }
 
 function installTrackTrigger() {   // 편집기에서 한 번만 실행
-  ScriptApp.getProjectTriggers().forEach(function (t) { if (/^(trackArrivals|dailyLetterJob)$/.test(t.getHandlerFunction())) ScriptApp.deleteTrigger(t); });
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (/^(trackArrivals|dailyLetterJob|landingWatch)$/.test(t.getHandlerFunction())) ScriptApp.deleteTrigger(t); });
   [13, 19].forEach(function (h) { ScriptApp.newTrigger('dailyLetterJob').timeBased().everyDays(1).atHour(h).inTimezone('Asia/Seoul').create(); });
+  ScriptApp.newTrigger('landingWatch').timeBased().everyMinutes(5).create();   // #00랜딩문의알림 새 문의 확인(2026-10-29)
+}
+
+// ── #00랜딩문의알림 → 편지 건넨 매장이면 댓글(2026-10-29) ─────────────────────
+// 5분마다 채널의 새 랜딩 문의를 읽고, 문의 매장이 「손님이 편지를 건넸다고 기록한 매장」(전달 탭)일 때만 그 알림에 스레드 댓글을 단다.
+// 매장 짝 맞추기: 매장 이름(띄어쓰기 · 기호 빼고 같거나, 한쪽이 다른 쪽을 품음) + 숨김 탭 「편지 매장 번호」(매장ID · 번호 해시 앞 12자)가 있으면 연락처 해시도.
+// 봇 토큰(chat:write · channels:history) = 「설정」 B7, 실제로 댓글 달기 = B8이 Y일 때만(아니면 「랜딩문의 매칭」 탭에만 적음).
+var LANDING_CH = 'CQVFJRHM4';
+var LANDING_TAG = '<@U03UESU9QCV> <@UC4QUTTR7> <@U01BY0S45SN>';   // 정중호 · 강기성 · 황봄이(서울영업팀)
+var MATCH_HEAD = ['확인 시각', '문의 시각', '문의 매장', '짝 맞춘 방법', '우리 매장', '댓글', '보냄'];
+
+function normName(s) { return String(s || '').replace(/[^0-9A-Za-z가-힣]/g, '').toLowerCase(); }
+function md(v) {   // 「11월 14일」
+  var d = v instanceof Date ? v : (/^\d{4}-\d{1,2}-\d{1,2}/.test(String(v)) ? new Date(String(v).slice(0, 10) + 'T00:00:00+09:00') : null);
+  return d && !isNaN(d) ? Utilities.formatDate(d, 'Asia/Seoul', 'M월 d일') : String(v || '');
+}
+function phoneHash(p) {
+  var no = String(p || '').replace(/\D/g, '');
+  if (no.length < 9) return '';
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, no).map(function (b) { return ('0' + (b & 255).toString(16)).slice(-2); }).join('').slice(0, 12);
+}
+
+// 편지를 건넨 매장 목록: 매장 키(매장ID 또는 이름) → { name, sid, hand: [{nick, day}], qr }
+function deliveredStores() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), out = {};
+  var D = ss.getSheetByName('전달');
+  if (!D || D.getLastRow() < 2) return out;
+  D.getRange(2, 1, D.getLastRow() - 1, 7).getValues().forEach(function (r) {
+    var sid = String(r[3] || ''), name = String(r[4] || ''), key = sid || normName(name);
+    if (!key) return;
+    var o = out[key] = out[key] || { sid: sid, name: name, hand: [], qr: null };
+    o.hand.push({ nick: String(r[5] || '') || '패써', day: r[6] || r[0], at: r[0] });
+  });
+  var Q = ss.getSheetByName('QR 접속');
+  if (Q && Q.getLastRow() > 1) Q.getRange(2, 1, Q.getLastRow() - 1, 5).getValues().forEach(function (r) {
+    var o = out[String(r[3] || '')] || out[normName(r[4])];
+    if (o && r[0] instanceof Date && (!o.qr || r[0] < o.qr)) o.qr = r[0];
+  });
+  return out;
+}
+
+// 문의 매장 이름 · 연락처 → 편지 건넨 매장 { store, how } 또는 null
+function matchDelivered(name, phone, stores) {
+  var h = phoneHash(phone), byHash = {};
+  var P = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('편지 매장 번호');
+  if (h && P && P.getLastRow() > 1) P.getRange(2, 1, P.getLastRow() - 1, 2).getValues().forEach(function (r) { if (String(r[1]) === h) byHash[String(r[0])] = true; });
+  var n = normName(name), best = null;
+  Object.keys(stores).forEach(function (k) {
+    var s = stores[k], m = normName(s.name);
+    if (byHash[s.sid]) best = { store: s, how: '연락처' };
+    else if (!best && n && m && (n === m || (Math.min(n.length, m.length) >= 6 && (n.indexOf(m) >= 0 || m.indexOf(n) >= 0)))) best = { store: s, how: '매장 이름' };
+  });
+  return best;
+}
+
+function landingComment(s) {
+  var hand = s.hand.slice().sort(function (a, b) { return new Date(a.at) - new Date(b.at); });
+  var who = hand.length === 1
+    ? '패써 「' + hand[0].nick + '」님이 ' + md(hand[0].day) + '에 편지를 건넨 매장이에요.'
+    : '패써 ' + hand.map(function (x) { return '「' + x.nick + '」님(' + md(x.day) + ')'; }).join(', ') + ', ' + hand.length + '분이 편지를 건넨 매장이에요.';
+  var lines = ['💌 이 매장은 ' + who];
+  if (s.qr) lines.push('사장님은 ' + md(s.qr) + '에 편지 속 QR로 손님 요청 페이지를 열어 보셨어요.');
+  lines.push('통화하실 때 "손님이 전해 드린 편지 보셨죠?"로 시작하시면 이야기가 쉬워요. 히스토리 참고 부탁드려요.');
+  lines.push(LANDING_TAG);
+  return lines.join('\n');
+}
+
+function slackApi(method, payload) {
+  var res = UrlFetchApp.fetch('https://slack.com/api/' + method, { method: 'post', contentType: 'application/json; charset=utf-8', muteHttpExceptions: true,
+    headers: { Authorization: 'Bearer ' + setting('B7') }, payload: JSON.stringify(payload) });
+  return JSON.parse(res.getContentText());
+}
+
+// 문의 알림 글 하나 → 이름 · 연락처
+function parseLanding(text) {
+  var t = String(text || '');
+  if (!/랜딩페이지/.test(t)) return null;
+  var name = (t.match(/\*이름\*\s*([^|\n]+)/) || [])[1], phone = (t.match(/\*연락처\*\s*([0-9\- ]+)/) || [])[1];
+  return name ? { name: name.trim(), phone: (phone || '').trim() } : null;
+}
+
+function landingWatch() {
+  if (!setting('B7')) return { ok: false, err: '봇 토큰 없음(설정 B7)' };
+  var props = PropertiesService.getScriptProperties();
+  var oldest = props.getProperty('LANDING_LAST_TS') || String(Date.now() / 1000 - 3600);
+  var res = slackApi('conversations.history', { channel: LANDING_CH, oldest: oldest, limit: 50 });
+  if (!res.ok) return { ok: false, err: res.error };
+  var msgs = (res.messages || []).filter(function (m) { return !m.thread_ts || m.thread_ts === m.ts; }).sort(function (a, b) { return Number(a.ts) - Number(b.ts); });
+  if (!msgs.length) return { ok: true, seen: 0 };
+  var stores = deliveredStores(), live = setting('B8').toUpperCase() === 'Y', log = sheet('랜딩문의 매칭', MATCH_HEAD), hit = 0;
+  msgs.forEach(function (m) {
+    var q = parseLanding(m.text);
+    if (!q) return;
+    var mt = matchDelivered(q.name, q.phone, stores);
+    if (!mt) return;
+    var text = landingComment(mt.store), sent = '';
+    if (live) { var r = slackApi('chat.postMessage', { channel: LANDING_CH, thread_ts: m.ts, text: text }); sent = r.ok ? 'Y' : '실패: ' + r.error; }
+    log.appendRow([new Date(), new Date(Number(m.ts) * 1000), q.name, mt.how, mt.store.name, text, sent || '안 보냄(설정 B8)']);
+    hit++;
+  });
+  props.setProperty('LANDING_LAST_TS', msgs[msgs.length - 1].ts);
+  return { ok: true, seen: msgs.length, matched: hit, live: live };
 }
 
 // ── 도착 · 리마인드 알림톡 자동 발송(2026-10-29) ───────────────────────────────

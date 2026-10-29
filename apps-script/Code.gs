@@ -116,6 +116,23 @@ function doPost(e) {
     var tl = okT2 ? ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + ' · ' + t.getEventType(); }) : null;
     return ContentService.createTextOutput(JSON.stringify(okT2 ? { ok: true, triggers: tl, landing_last: PropertiesService.getScriptProperties().getProperty('LANDING_LAST_TS') } : { ok: false })).setMimeType(ContentService.MimeType.JSON);
   }
+  if (d.type === 'landing_export') {   // 지난 랜딩 문의(매칭률 가늠용): 시각 · 매장 이름 · 지역 · 연락처 해시 앞 16자만(번호 원문은 돌려주지 않음). 비밀번호 = 「설정」 B2
+    var okE = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
+    if (!okE) return ContentService.createTextOutput(JSON.stringify({ ok: false, reason: 'token' })).setMimeType(ContentService.MimeType.JSON);
+    var rowsE = [], cur = '', guard = 0;
+    do {
+      var pg = slackApi('conversations.history', { channel: LANDING_CH, limit: 200, cursor: cur || undefined, oldest: d.oldest || '0' });
+      if (!pg.ok) return ContentService.createTextOutput(JSON.stringify({ ok: false, error: pg.error })).setMimeType(ContentService.MimeType.JSON);
+      (pg.messages || []).forEach(function (m) {
+        var t = String(m.text || ''), q = parseLanding(t);
+        if (!q) return;
+        var no = q.phone.replace(/\D/g, ''), hx = no.length >= 9 ? Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, no).map(function (b) { return ('0' + (b & 255).toString(16)).slice(-2); }).join('').slice(0, 16) : '';
+        rowsE.push([Utilities.formatDate(new Date(Number(m.ts) * 1000), 'Asia/Seoul', 'yyyy-MM-dd HH:mm'), q.name, ((t.match(/\*지역\*\s*([^|\n]+)/) || [])[1] || '').trim(), hx]);
+      });
+      cur = pg.response_metadata && pg.response_metadata.next_cursor;
+    } while (cur && ++guard < (d.pages || 5) && rowsE.length < (d.max || 1000));
+    return ContentService.createTextOutput(JSON.stringify({ ok: true, n: rowsE.length, rows: rowsE })).setMimeType(ContentService.MimeType.JSON);
+  }
   if (d.type === 'landing_scan') {   // 최근 문의 n건을 읽어 이름 · 연락처를 뽑히는지와 짝 맞춘 결과만 셈(댓글 안 씀 · 연락처 값은 돌려주지 않음). 비밀번호 = 「설정」 B2
     var okC = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
     if (!okC) return ContentService.createTextOutput(JSON.stringify({ ok: false, reason: 'token' })).setMimeType(ContentService.MimeType.JSON);
@@ -126,7 +143,7 @@ function doPost(e) {
       if (!q) return;
       sc.parsed++; if (phoneHash(q.phone)) sc.phone++;
       if (sc.names.length < 5) sc.names.push(q.name);
-      if (matchDelivered(q.name, q.phone, sto)) sc.matched++;
+      if (matchDelivered(q.name, q.phone, sto, q.region)) sc.matched++;
     });
     sc.ok = hs.ok; sc.error = hs.error; sc.delivered_stores = Object.keys(sto).length;
     return ContentService.createTextOutput(JSON.stringify(sc)).setMimeType(ContentService.MimeType.JSON);
@@ -134,7 +151,7 @@ function doPost(e) {
   if (d.type === 'landing_test') {   // 랜딩 문의 댓글 미리 보기(슬랙에 안 씀): 견본 매장 댓글 + 실제 전달 매장과 짝 맞춘 결과. 비밀번호 = 「설정」 B2
     var okL = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
     if (!okL) return ContentService.createTextOutput(JSON.stringify({ ok: false, reason: 'token' })).setMimeType(ContentService.MimeType.JSON);
-    var st = deliveredStores(), mt = matchDelivered(d.name, d.phone, st);
+    var st = deliveredStores(), mt = matchDelivered(d.name, d.phone, st, d.region);
     var one = { name: '견본매장', hand: [{ nick: '라떼좋아', day: '2026-11-14', at: '2026-11-14' }], qr: new Date('2026-11-15T10:00:00+09:00') };
     var two = { name: '견본매장', hand: [{ nick: '라떼좋아', day: '2026-11-14', at: '2026-11-14' }, { nick: '아침한잔', day: '2026-11-16', at: '2026-11-16' }], qr: null };
     return ContentService.createTextOutput(JSON.stringify({ ok: true, delivered_stores: Object.keys(st).length, match: mt ? { how: mt.how, store: mt.store.name } : null,
@@ -704,18 +721,34 @@ function deliveredStores() {
     var o = out[String(r[3] || '')] || out[normName(r[4])];
     if (o && r[0] instanceof Date && (!o.qr || r[0] < o.qr)) o.qr = r[0];
   });
+  // 매장 주소 키(숨김 탭 「편지 매장 주소」 A 매장ID · B 도로명+건물번호 키, 인쇄 묶음 만들 때 Snowflake에서 채움)
+  var A = ss.getSheetByName('편지 매장 주소');
+  if (A && A.getLastRow() > 1) A.getRange(2, 1, A.getLastRow() - 1, 2).getValues().forEach(function (r) { if (out[String(r[0])]) out[String(r[0])].ak = String(r[1]); });
+  // 우리 점주 페이지에서 사장님이 남긴 번호(「문의」 탭 G) → 해시로만 들고 있음
+  var I = ss.getSheetByName('문의');
+  if (I && I.getLastRow() > 1) I.getRange(2, 1, I.getLastRow() - 1, 7).getValues().forEach(function (r) {
+    var o = out[String(r[3] || '')], h = phoneHash(r[6]);
+    if (o && h) (o.tels = o.tels || {})[h] = true;
+  });
   return out;
 }
 
-// 문의 매장 이름 · 연락처 → 편지 건넨 매장 { store, how } 또는 null
-function matchDelivered(name, phone, stores) {
-  var h = phoneHash(phone), byHash = {};
+// 도로명 + 건물번호 키: 「월곶중앙로 70번길 3」 → 「중앙로70번길3」(도로명 끝 3글자 + 번호). Snowflake 쪽과 같은 규칙
+function addrKey(s) {
+  var m = String(s || '').match(/([가-힣]+(?:로|길))\s*([0-9]+(?:\s*번길\s*[0-9]+)?)/);
+  return m ? m[1].slice(-3) + m[2].replace(/\s/g, '') : '';
+}
+
+// 문의 매장 이름 · 연락처 · 지역 → 편지 건넨 매장 { store, how } 또는 null
+// 지난 문의 250건으로 잰 결과(2026-10-29): 연락처가 문의 전에 DB에 있던 건 22%, 이름은 맞는 매장을 80% 찾음, 주소는 도로명이 적힌 47%에서 보조
+function matchDelivered(name, phone, stores, region) {
+  var h = phoneHash(phone), byHash = {}, ak = addrKey(region);
   var P = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('편지 매장 번호');
   if (h && P && P.getLastRow() > 1) P.getRange(2, 1, P.getLastRow() - 1, 2).getValues().forEach(function (r) { if (String(r[1]) === h) byHash[String(r[0])] = true; });
   var n = normName(name), best = null;
   Object.keys(stores).forEach(function (k) {
     var s = stores[k], m = normName(s.name);
-    if (byHash[s.sid]) best = { store: s, how: '연락처' };
+    if (byHash[s.sid] || (h && s.tels && s.tels[h])) best = { store: s, how: '연락처' };
     // 이름: 같거나, 짧은 쪽이 지점명까지(「…점」으로 끝남) 있고 긴 쪽에 들어 있을 때만. 「메가MGC커피」처럼 브랜드만 적은 문의가 다른 지점과 붙지 않게
     var sh = n.length <= m.length ? n : m, lo = sh === n ? m : n;
     if (!best && n && m && (n === m || (sh.length >= 6 && /점$/.test(sh) && lo.indexOf(sh) >= 0))) best = { store: s, how: '매장 이름' };
@@ -723,6 +756,8 @@ function matchDelivered(name, phone, stores) {
     else if (!best && n.length >= 6 && m.length >= 6 && n.slice(0, 2) === m.slice(0, 2) && dice(n, m) >= 0.8) best = { store: s, how: '비슷한 매장 이름' };
     // 브랜드를 줄여 씀(메가커피 ↔ 메가MGC커피): 앞 2글자가 같고 끝의 지점명이 5글자 이상(「…점」 포함) 똑같을 때
     else if (!best && n.slice(0, 2) === m.slice(0, 2) && /점$/.test(n) && sameTail(n, m) >= 5) best = { store: s, how: '지점명' };
+    // 주소: 문의 「지역」의 도로명 + 건물번호가 매장 주소와 같을 때(이름이 달라도)
+    else if (!best && ak && s.ak && ak === s.ak) best = { store: s, how: '주소' };
   });
   return best;
 }
@@ -750,7 +785,9 @@ function parseLanding(text) {
   var t = String(text || '');
   if (!/랜딩페이지/.test(t)) return null;
   var name = (t.match(/\*이름\*\s*([^|\n]+)/) || [])[1], phone = (t.match(/\*연락처\*\s*([0-9\- ]+)/) || [])[1];
-  return name ? { name: name.trim(), phone: (phone || '').trim() } : null;
+  var region = (t.match(/\*지역\*\s*([^|
+]+)/) || [])[1];
+  return name ? { name: name.trim(), phone: (phone || '').trim(), region: (region || '').trim() } : null;
 }
 
 function landingWatch() {
@@ -765,7 +802,7 @@ function landingWatch() {
   msgs.forEach(function (m) {
     var q = parseLanding(m.text);
     if (!q) return;
-    var mt = matchDelivered(q.name, q.phone, stores);
+    var mt = matchDelivered(q.name, q.phone, stores, q.region);
     if (!mt) return;
     var text = landingComment(mt.store), sent = '';
     if (live) { var r = slackApi('chat.postMessage', { channel: LANDING_CH, thread_ts: m.ts, text: text }); sent = r.ok ? 'Y' : '실패: ' + r.error; }

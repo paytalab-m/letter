@@ -559,7 +559,9 @@ function epostKey() {
   var k = PropertiesService.getScriptProperties().getProperty('EPOST_KEY');
   if (k) return k;
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정');
-  return sh ? String(sh.getRange('B4').getValue()).trim() : '';
+  k = sh ? String(sh.getRange('B4').getValue()).trim() : '';
+  try { if (/%[0-9A-F]{2}/i.test(k)) k = decodeURIComponent(k); } catch (e) {}   // Encoding 키를 넣어도 되게
+  return k;
 }
 
 function tag(xml, name) {   // 마지막으로 나온 <name>값</name>

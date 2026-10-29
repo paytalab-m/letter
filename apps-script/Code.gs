@@ -785,8 +785,7 @@ function parseLanding(text) {
   var t = String(text || '');
   if (!/랜딩페이지/.test(t)) return null;
   var name = (t.match(/\*이름\*\s*([^|\n]+)/) || [])[1], phone = (t.match(/\*연락처\*\s*([0-9\- ]+)/) || [])[1];
-  var region = (t.match(/\*지역\*\s*([^|
-]+)/) || [])[1];
+  var region = (t.match(/\*지역\*\s*([^|\n]+)/) || [])[1];
   return name ? { name: name.trim(), phone: (phone || '').trim(), region: (region || '').trim() } : null;
 }
 

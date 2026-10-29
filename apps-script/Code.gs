@@ -87,7 +87,7 @@ function doGet(e) {
 
 function doPost(e) {
   var d = JSON.parse(e.postData.contents);
-  if (d.type === 'print_list' || d.type === 'print_mark') return ContentService.createTextOutput(JSON.stringify(printOps(d))).setMimeType(ContentService.MimeType.JSON);
+  if (d.type === 'print_list' || d.type === 'print_mark' || d.type === 'sent_mark') return ContentService.createTextOutput(JSON.stringify(printOps(d))).setMimeType(ContentService.MimeType.JSON);
   if (d.type === 'send_list') return ContentService.createTextOutput(JSON.stringify(sendList(d))).setMimeType(ContentService.MimeType.JSON);
   if (d.type === 'apply_slack_test') {   // 신청 알림 시험(비밀번호 = 「설정」 B2). 시트에는 아무것도 적지 않음
     var ok = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
@@ -584,6 +584,12 @@ function printOps(d) {
     });
     return { ok: true, marked: cnt };
   }
+  if (d.type === 'sent_mark') {   // 우체국에 접수한 편지코드들의 발송일(G) 기록 → 발송일 + 「마감 관리」 B25 영업일에 도착 알림톡(2026-10-29)
+    var wantS = {}; (d.codes || []).forEach(function (c) { wantS[c] = true; });
+    var sd = d.date ? new Date(d.date + 'T00:00:00+09:00') : new Date(), cs = 0;
+    lv.forEach(function (r, i) { if (wantS[String(r[0])]) { L.getRange(i + 2, 7).setValue(sd); cs++; } });
+    return { ok: true, marked: cs, date: Utilities.formatDate(sd, 'Asia/Seoul', 'yyyy-MM-dd') };
+  }
   var moved = screenWrongAddr();   // 받는 주소가 그 매장 주소인 신청은 인쇄 전에 「주소 오류」 탭으로 옮김(2026-10-29 결정)
   if (moved) { L = ss.getSheetByName('편지'); n = L.getLastRow() - 1; lv = n > 0 ? L.getRange(2, 1, n, LETTER_HEAD.length).getValues() : []; }
   var addr = {};
@@ -936,13 +942,39 @@ function sendKind(kind, live) {
   return { n: rows.length, sent: rows.length };
 }
 
+// ── 예상 도착일(2026-10-29: 준등기는 비용 때문에 안 씀 → 일반 우편) ─────────────────
+// 「편지」 G열 발송일(우체국 접수일)이 있고 도착일(I)이 빈 편지는, 발송일 + 「마감 관리」 B25 영업일(토 · 일 제외, 기본 4 = 일반 우편 D+3 + 여유 1일)이
+// 지나면 도착일에 그 날짜를 적는다 → 「도착 알림 대상」에 올라 도착 알림톡이 나감. Y열에 「예상 도착」으로 남김. 공휴일은 따로 빼지 않음
+function addBizDays(d, n) {
+  var x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  while (n > 0) { x.setDate(x.getDate() + 1); if (x.getDay() !== 0 && x.getDay() !== 6) n--; }
+  return x;
+}
+
+function predictArrivals() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), L = ss.getSheetByName('편지');
+  if (!L || L.getLastRow() < 2) return { predicted: 0 };
+  var days = Number(ss.getSheetByName('마감 관리').getRange('B25').getValue()) || 4;
+  if (!L.getRange(1, TRACK_COL).getValue()) L.getRange(1, TRACK_COL).setValue('배송 상태');
+  var n = L.getLastRow() - 1, v = L.getRange(2, 7, n, 3).getValues(), today = new Date(), cnt = 0;   // G 발송일 · H 운송장 · I 도착일
+  for (var i = 0; i < n; i++) {
+    if (!(v[i][0] instanceof Date) || v[i][2]) continue;
+    var due = addBizDays(v[i][0], days);
+    if (today < due) continue;
+    L.getRange(i + 2, 9).setValue(due);
+    L.getRange(i + 2, TRACK_COL).setValue('예상 도착 ' + Utilities.formatDate(due, 'Asia/Seoul', 'M/d') + ' (발송일 + ' + days + '영업일)');
+    cnt++;
+  }
+  return { predicted: cnt };
+}
+
 function dailyLetterJob() {
-  var tr = trackArrivals();
-  var live = setting('B6').toUpperCase() === 'Y', out = { track: tr, live: live };
+  var tr = trackArrivals(), pr = predictArrivals();
+  var live = setting('B6').toUpperCase() === 'Y', out = { track: tr, predict: pr, live: live };
   ['arrive', 'remind'].forEach(function (k) { try { out[k] = sendKind(k, live); } catch (e) { out[k] = { n: 0, sent: 0, err: String(e) }; } });
   var line = function (k) { var o = out[k]; return MSG[k].name + ' ' + (live ? o.sent + '명 보냄' : o.n + '명 대상(자동 발송 꺼짐 · 설정 B6)') + (o.err ? ' · 실패: ' + o.err : ''); };
-  var text = '*편지 배달 조회 · 알림톡*\n배달 조회 ' + tr.checked + '통 · 오늘 도착 ' + tr.arrived + '통' + (tr.fail ? ' · 조회 실패 ' + tr.fail + '통' : '') +
+  var text = '*편지 도착 · 알림톡*\n오늘 도착으로 본 편지 ' + (pr.predicted + tr.arrived) + '통(예상 도착일 기준 ' + pr.predicted + '통' + (tr.checked ? ' · 배달 조회 ' + tr.arrived + '통' : '') + ')' +
     '\n' + line('arrive') + '\n' + line('remind') + (live ? '\n실제 성공 여부는 백오피스 「발송 내역」에서 확인' : '');
-  try { var url = slackUrl('SLACK_WEBHOOK_APPLY', 'B3'); if (url && (tr.checked || out.arrive.n || out.remind.n)) UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify({ text: text }), muteHttpExceptions: true }); } catch (e) {}
+  try { var url = slackUrl('SLACK_WEBHOOK_APPLY', 'B3'); if (url && (pr.predicted || tr.checked || out.arrive.n || out.remind.n)) UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify({ text: text }), muteHttpExceptions: true }); } catch (e) {}
   return out;
 }

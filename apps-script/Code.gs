@@ -111,6 +111,11 @@ function doPost(e) {
     }
     return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
   }
+  if (d.type === 'trigger_list') {   // 걸려 있는 자동 실행(트리거) 목록. 비밀번호 = 「설정」 B2
+    var okT2 = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
+    var tl = okT2 ? ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + ' · ' + t.getEventType(); }) : null;
+    return ContentService.createTextOutput(JSON.stringify(okT2 ? { ok: true, triggers: tl, landing_last: PropertiesService.getScriptProperties().getProperty('LANDING_LAST_TS') } : { ok: false })).setMimeType(ContentService.MimeType.JSON);
+  }
   if (d.type === 'landing_scan') {   // 최근 문의 n건을 읽어 이름 · 연락처를 뽑히는지와 짝 맞춘 결과만 셈(댓글 안 씀 · 연락처 값은 돌려주지 않음). 비밀번호 = 「설정」 B2
     var okC = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
     if (!okC) return ContentService.createTextOutput(JSON.stringify({ ok: false, reason: 'token' })).setMimeType(ContentService.MimeType.JSON);

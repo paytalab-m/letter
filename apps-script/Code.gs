@@ -93,6 +93,10 @@ function doPost(e) {
     var ok = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
     return ContentService.createTextOutput(JSON.stringify(ok ? { ok: true, slack: notifyApply({ store: '테스트매장', nick: '테스트', grp: 's', la: '1', g: '1', src: 'call', w: '1', vid: 'TEST-0001', sid: '', ref: 'utm_content=ltr_rcr_benefit&utm_term=ltr_selftest_b1' }) } : { ok: false, reason: 'token' })).setMimeType(ContentService.MimeType.JSON);
   }
+  if (d.type === 'track_test' || d.type === 'track_run') {   // 우체국 배달 조회 시험(rgist 한 건, 시트에 안 씀) · 지금 한 번 돌리기. 비밀번호 = 「설정」 B2
+    var okT = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
+    return ContentService.createTextOutput(JSON.stringify(!okT ? { ok: false, reason: 'token' } : d.type === 'track_test' ? trackOne(d.rgist) : trackArrivals())).setMimeType(ContentService.MimeType.JSON);
+  }
   if (d.type === 'link_put') return ContentService.createTextOutput(JSON.stringify(linkPut(d))).setMimeType(ContentService.MimeType.JSON);
   if (!d.c && d.code) d.c = d.code;   // 10/23 점주 페이지는 code로 보냄
   if (d.store) d.store = String(d.store).replace(/[☎☏✆]|\uD83D[\uDCDE\uDCF1\uDCF2]/g, '').replace(/\s+/g, ' ').trim(); // 매장명의 ☎ 같은 전화 기호 제거
@@ -541,4 +545,64 @@ function test() {
   var base = { vid: 'TEST' + Date.now(), uid: 'test', g: '1', src: 'call', store: '패스카페', device: 'PC', app: '일반 브라우저', ref: 'test' };
   doPost({ postData: { contents: JSON.stringify(Object.assign({ type: 'visit', ts: now }, base)) } });
   doPost({ postData: { contents: JSON.stringify(Object.assign({ type: 'apply', ts: now, t0: now, n: 9, first: true, nick: '라떼좋아', nickChanged: false, name: '홍길동', zip: '06236', addr: '서울 강남구 테헤란로 1', addr2: '101호' }, base)) } });
+}
+
+// ── 우체국 배달 조회(2026-10-29) ─────────────────────────────────────────────
+// 「편지」 탭에서 운송장번호(H)가 있고 도착일(I)이 빈 편지를 우체국 국내등기 종적조회 API로 물어,
+// 「배달완료」면 도착일(I)에 배달일자를 적는다 → 「도착 알림 대상」에 자동으로 오른다.
+// 마지막 조회 결과는 Y열 「배송 상태」에 남긴다. 인증키는 「설정」 B4(공공데이터포털 일반 인증키 · 인코딩 안 된 값).
+// 매일 자동: 편집기에서 installTrackTrigger를 한 번 실행(매일 13시 · 19시).
+var TRACK_URL = 'http://openapi.epost.go.kr/trace/retrieveLongitudinalService/retrieveLongitudinalService/getLongitudinalDomesticList';
+var TRACK_COL = 25;   // 「편지」 Y열
+
+function epostKey() {
+  var k = PropertiesService.getScriptProperties().getProperty('EPOST_KEY');
+  if (k) return k;
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정');
+  return sh ? String(sh.getRange('B4').getValue()).trim() : '';
+}
+
+function tag(xml, name) {   // 마지막으로 나온 <name>값</name>
+  var m = xml.match(new RegExp('<' + name + '>([^<]*)</' + name + '>', 'g'));
+  return m ? m[m.length - 1].replace(/<[^>]+>/g, '').trim() : '';
+}
+
+// 등기번호 한 건 조회 → { ok, done(배달완료), day(yyyy-MM-dd), status, last, err }
+function trackOne(rgist) {
+  var no = String(rgist || '').replace(/\D/g, '');
+  if (no.length !== 13) return { ok: false, err: '등기번호 13자리 아님' };
+  var key = epostKey();
+  if (!key) return { ok: false, err: '인증키 없음(설정 B4)' };
+  var res = UrlFetchApp.fetch(TRACK_URL + '?ServiceKey=' + encodeURIComponent(key) + '&rgist=' + no, { muteHttpExceptions: true });
+  var x = res.getContentText();
+  var err = tag(x, 'returnAuthMsg') || tag(x, 'errMsg') || (res.getResponseCode() !== 200 ? 'HTTP ' + res.getResponseCode() : '');
+  if (err && !/NORMAL/.test(err)) return { ok: false, err: err + (tag(x, 'returnReasonCode') ? ' (' + tag(x, 'returnReasonCode') + ')' : '') };
+  var status = tag(x, 'dlvySttus'), dlvyDe = tag(x, 'dlvyDe');
+  var last = [tag(x, 'dlvyDate'), tag(x, 'dlvyTime'), tag(x, 'nowLc'), tag(x, 'processSttus')].filter(String).join(' ');
+  var done = /배달완료/.test(status) || /배달완료/.test(tag(x, 'processSttus'));
+  var day = (dlvyDe || (done ? tag(x, 'dlvyDate') : '')).replace(/\./g, '-');
+  if (!status && !last) return { ok: false, err: '조회 결과 없음', raw: x.slice(0, 300) };
+  return { ok: true, done: done, day: day, status: status, last: last };
+}
+
+function trackArrivals() {
+  var L = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('편지');
+  if (!L || L.getLastRow() < 2) return { ok: true, checked: 0, arrived: 0, fail: 0 };
+  if (!L.getRange(1, TRACK_COL).getValue()) L.getRange(1, TRACK_COL).setValue('배송 상태');
+  var n = L.getLastRow() - 1, v = L.getRange(2, 8, n, 2).getValues();   // H 운송장번호 · I 도착일
+  var now = Utilities.formatDate(new Date(), 'Asia/Seoul', 'M/d HH:mm'), checked = 0, arrived = 0, fail = 0;
+  for (var i = 0; i < n; i++) {
+    if (!v[i][0] || v[i][1]) continue;
+    var r = trackOne(v[i][0]); checked++;
+    if (!r.ok) { fail++; L.getRange(i + 2, TRACK_COL).setValue('조회 실패: ' + r.err + ' · ' + now); continue; }
+    if (r.done && r.day) { L.getRange(i + 2, 9).setValue(new Date(r.day + 'T00:00:00+09:00')); arrived++; }
+    L.getRange(i + 2, TRACK_COL).setValue((r.done ? '배달완료 ' + r.day : r.last || r.status) + ' · 조회 ' + now);
+    Utilities.sleep(150);   // 초당 호출 제한
+  }
+  return { ok: true, checked: checked, arrived: arrived, fail: fail };
+}
+
+function installTrackTrigger() {   // 편집기에서 한 번만 실행
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'trackArrivals') ScriptApp.deleteTrigger(t); });
+  [13, 19].forEach(function (h) { ScriptApp.newTrigger('trackArrivals').timeBased().everyDays(1).atHour(h).inTimezone('Asia/Seoul').create(); });
 }

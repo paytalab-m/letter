@@ -19,7 +19,7 @@
 //
 // 10/23: 모집 · 내 편지는 링크에 값(uid · sid · grp · g · src · store · nick 등)을 넣는 방식, 점주 QR은 편지코드(?c=) 방식.
 //   uid가 오면 「모집대상」에서 그 손님 줄을 찾아 열쇠 · 매장ID를 잇는다(10/15 예전 명단에 있는 손님만).
-//   가게당 3명 · 우편 정원 마감은 랜딩에서 막지 않고 CRM 발송 단계에서 한다(「마감 관리」 탭 참고).
+//   가게당 신청 3건이 차면 랜딩에서 마감(2026-10-29 결정). 마감 뒤 신청하려던 손님은 「대기 신청」 탭에 남긴다. 우편 정원 마감은 CRM 발송 단계에서 한다.
 //   GET ?sid=&grp=&store= → 마감 여부 { closed, reason }
 //   링크의 la(편지 종류 1·2·3) · qr(1 = QR 있음, 0 = QR 없음) · w(차수)는 명단의 letter_arm · qr_arm · wave. 편지 탭에 그대로 옮겨 인쇄 기준으로 쓴다.
 //   QR 없음 가게의 편지는 점주 QR 링크를 비운다(편지에 QR을 넣지 않음).
@@ -35,8 +35,8 @@ var DELIV_MARK_COL = 14; // 「모집대상」 N열 「전달 기록」
 var VIEW_HEAD = ['열람시각', '열쇠', '회원ID', '매장ID', '매장', '전달 기한', '이미 기록함', '기기', '열린 앱', '유입 URL', '들어온 메시지'];
 var VIEW_MARK_COL = 15; // 「모집대상」 O열 「내 편지 열람」
 var STEPS = ['랜딩', '신청화면', '신청완료'];
-// 마감 규칙: 랜딩에서 신청 마감을 막지 않음 (2026-10-23 사용자 결정). 다시 켜려면 숫자를 넣고 새 버전 배포
-var STORE_CAP = 0;                    // 가게당 인원 마감 (예: 3). 0이면 안 씀
+// 마감 규칙: 가게당 신청 3건이 차면 랜딩에서 마감 (2026-10-29 사용자 결정. 편지 내용이 3종이라 한 가게에 같은 편지가 두 번 가지 않게). 바꾸면 새 버전 배포
+var STORE_CAP = 3;                    // 가게당 인원 마감. 0이면 안 씀
 var QUOTA = {};                       // 시험별 우편 정원 (예: { s: 1505, q: 801 }). 비우면 안 씀
 var QUOTA_ALL = 0;                    // 전체 정원. 0이면 안 씀
 var APPLY_GRP_COL = 32;               // 「신청」 AF열 「시험」
@@ -116,7 +116,7 @@ function doPost(e) {
       // 같은 방문에서 신청을 두 번 누름(편지코드 = 방문ID가 이미 있음): 회원ID가 없는 접속도 줄을 늘리지 않음
       if (d.vid && sheet('신청', APPLY_HEAD).getRange('A:A').createTextFinder(String(d.vid)).matchEntireCell(true).findNext()) st.dup = true;
       if (st.dup) res = { ok: true, dup: true };                 // 같은 손님이 같은 가게에 다시 누름: 줄을 늘리지 않음
-      else if (st.closed) res = { ok: false, reason: st.reason }; // 마감
+      else if (st.closed) { res = { ok: false, reason: st.reason }; addWait(d, st.reason); } // 마감: 신청하려던 손님은 「대기 신청」에 남김
       else {
         if (!d.vid) d.vid = ('L' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5)).toUpperCase();
         addApply(d); addLetter(d); updateVisit(d, '신청완료', APPLY_AT_COL); mark(p, 3);
@@ -512,6 +512,16 @@ function addApply(d) {
     '=IF(' + E + '="","",IF(COUNTIF(E$2:' + E + ',' + E + ')>1,"중복",""))',
     '접수', '', '', '', '', '', '',
     txt(d.grp), armLetter(d), armQr(d), txt(d.w)
+  ]]);
+}
+
+// 마감돼서 신청하지 못한 손님(2026-10-29). 나중에 다른 매장 연결 · 쿠폰 안내용. 「신청」 탭에는 넣지 않아 매장 신청 수에 잡히지 않음
+var WAIT_HEAD = ['시각', '방문ID', '회원ID', '열쇠', '매장ID', '매장', '마감 이유', '시험', '소구', '경로', '닉네임', '받는 분', '우편번호', '주소', '상세 주소', '유입 URL', '처리상태', '메모'];
+function addWait(d, reason) {
+  var sh = sheet('대기 신청', WAIT_HEAD);
+  sh.getRange(sh.getLastRow() + 1, 1, 1, WAIT_HEAD.length).setValues([[
+    at(d.ts), txt(d.vid), txt(d.uid), txt(d.t), txt(d.sid), txt(d.store), reason === 'store' ? '매장 3건 참' : '정원 참',
+    txt(d.grp), txt(d.g), txt(d.src), txt(d.nick), txt(d.name), txt(d.zip), txt(d.addr), txt(d.addr2), txt(d.ref), '대기', ''
   ]]);
 }
 

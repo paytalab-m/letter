@@ -133,6 +133,23 @@ function doPost(e) {
     } while (cur && ++guard < (d.pages || 5) && rowsE.length < (d.max || 1000));
     return ContentService.createTextOutput(JSON.stringify({ ok: true, n: rowsE.length, rows: rowsE })).setMimeType(ContentService.MimeType.JSON);
   }
+  if (d.type === 'apply_delete') {   // 시험 · 잘못 들어간 신청을 신청 · 편지 · 방문에서 지움(되돌릴 수 없음). empty: true면 신청시각이 빈 신청도 함께. 비밀번호 = 「설정」 B2
+    var okDel = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
+    if (!okDel) return ContentService.createTextOutput(JSON.stringify({ ok: false })).setMimeType(ContentService.MimeType.JSON);
+    var wantD = {}, gone = {}, ssD = SpreadsheetApp.getActiveSpreadsheet(); (d.codes || []).forEach(function (c) { if (c) wantD[String(c)] = true; });
+    var lockD = LockService.getScriptLock(); lockD.waitLock(20000);
+    try {
+      var AD = ssD.getSheetByName('신청');
+      if (d.empty && AD.getLastRow() > 1) AD.getRange(2, 1, AD.getLastRow() - 1, 2).getValues().forEach(function (r) { if (r[0] && !r[1]) wantD[String(r[0])] = true; });
+      ['신청', '편지', '방문'].forEach(function (nm) {
+        var sh = ssD.getSheetByName(nm); gone[nm] = 0;
+        if (!sh || sh.getLastRow() < 2) return;
+        var col = sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues();
+        for (var i = col.length - 1; i >= 0; i--) if (wantD[String(col[i][0])]) { sh.deleteRow(i + 2); gone[nm]++; }
+      });
+    } finally { lockD.releaseLock(); }
+    return ContentService.createTextOutput(JSON.stringify({ ok: true, codes: Object.keys(wantD), deleted: gone })).setMimeType(ContentService.MimeType.JSON);
+  }
   if (d.type === 'addr_move') {   // 신청번호 목록을 「주소 오류」 탭으로 옮김(신청 · 편지에서 뺌). 비밀번호 = 「설정」 B2
     var okMv = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
     return ContentService.createTextOutput(JSON.stringify(okMv ? { ok: true, moved: moveWrongAddr(d.codes, d.reason || '받는 주소 = 매장 주소') } : { ok: false })).setMimeType(ContentService.MimeType.JSON);
@@ -197,6 +214,7 @@ function doPost(e) {
     else if (d.type === 'delivered') { addDelivered(d); markCol(p, DELIV_MARK_COL); }
     else if (d.type === 'visit') { addVisit(d); mark(p, 1); }
     else if (d.type === 'step') { updateVisit(d, '신청화면', FORM_AT_COL); mark(p, 2); }
+    else if (d.type || !d.vid || !d.name || !d.addr) res = { ok: false, reason: 'bad_request' };   // 신청은 type 없이 방문ID · 이름 · 주소가 있을 때만(2026-10-29: 모르는 요청이 빈 신청으로 들어간 일)
     else {
       var st = status_(d.sid || '', d.grp || '', d.store || '', d.uid || '');
       // 같은 방문에서 신청을 두 번 누름(편지코드 = 방문ID가 이미 있음): 회원ID가 없는 접속도 줄을 늘리지 않음
@@ -943,7 +961,7 @@ function sendKind(kind, live) {
 }
 
 // ── 예상 도착일(2026-10-29: 준등기는 비용 때문에 안 씀 → 일반 우편) ─────────────────
-// 「편지」 G열 발송일(우체국 접수일)이 있고 도착일(I)이 빈 편지는, 발송일 + 「마감 관리」 B25 영업일(토 · 일 제외, 기본 4 = 일반 우편 D+3 + 여유 1일)이
+// 「편지」 G열 발송일(우체국 접수일)이 있고 도착일(I)이 빈 편지는, 발송일 + 「마감 관리」 B25 영업일(토 · 일 제외, 기본 5 = 일반 우편 D+3 + 여유 2일)이
 // 지나면 도착일에 그 날짜를 적는다 → 「도착 알림 대상」에 올라 도착 알림톡이 나감. Y열에 「예상 도착」으로 남김. 공휴일은 따로 빼지 않음
 function addBizDays(d, n) {
   var x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -954,7 +972,7 @@ function addBizDays(d, n) {
 function predictArrivals() {
   var ss = SpreadsheetApp.getActiveSpreadsheet(), L = ss.getSheetByName('편지');
   if (!L || L.getLastRow() < 2) return { predicted: 0 };
-  var days = Number(ss.getSheetByName('마감 관리').getRange('B25').getValue()) || 4;
+  var days = Number(ss.getSheetByName('마감 관리').getRange('B25').getValue()) || 5;
   if (!L.getRange(1, TRACK_COL).getValue()) L.getRange(1, TRACK_COL).setValue('배송 상태');
   var n = L.getLastRow() - 1, v = L.getRange(2, 7, n, 3).getValues(), today = new Date(), cnt = 0;   // G 발송일 · H 운송장 · I 도착일
   for (var i = 0; i < n; i++) {

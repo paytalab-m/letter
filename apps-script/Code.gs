@@ -158,8 +158,9 @@ function doPost(e) {
   if (d.type === 'applicant_addr_keys') {   // 신청 주소가 매장 주소인지 점검용: 신청번호 · 매장ID · 주소키 해시 · 신호만(주소 원문은 돌려주지 않음). 비밀번호 = 「설정」 B2
     var okK = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
     if (!okK) return ContentService.createTextOutput(JSON.stringify({ ok: false })).setMimeType(ContentService.MimeType.JSON);
-    var AP = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('신청'), outK = [];
-    AP.getRange(2, 1, AP.getLastRow() - 1, 18).getValues().forEach(function (r) {
+    var wrongTab = d.tab === '주소 오류', AP = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(wrongTab ? '주소 오류' : '신청'), outK = [];   // 「주소 오류」 탭은 앞에 2칸(옮긴 시각 · 사유)이 더 있음
+    AP.getRange(2, 1, AP.getLastRow() - 1, wrongTab ? 20 : 18).getValues().forEach(function (r) {
+      if (wrongTab) r = r.slice(2);
       if (!r[0]) return;
       var full = String(r[16]) + ' ' + String(r[17]), sn = normName(r[9]), an = normName(full), k = addrKey(r[16]);
       var brand = sn.replace(/(점|본점|직영점)$/, '').slice(0, 4);

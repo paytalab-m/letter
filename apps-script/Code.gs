@@ -214,7 +214,7 @@ function doPost(e) {
   try {
     if (d.type === 'scan') { addScan(d); markCol(p, QR_MARK_COL); }
     else if (d.type === 'inquiry' || d.type === 'contact_click') { addInquiry(d); markCol(p, INQ_MARK_COL); }
-    else if (d.type === 'letter_view') { addLetterView(d); markCol(p, VIEW_MARK_COL); if (/utm_content=ltr_guide_qr/.test(String(d.ref || ''))) guideArrival(d); }
+    else if (d.type === 'letter_view') { if (letterSent(d.uid, d.store)) { addLetterView(d); markCol(p, VIEW_MARK_COL); if (/utm_content=ltr_guide_qr/.test(String(d.ref || ''))) guideArrival(d); } else res.test = true; }   // 발송일 전 「내 편지」 열람 = 시험(시험 인쇄 · 도착 알림 링크 확인) → 기록 안 함(2026-10-30)
     else if (d.type === 'delivered') { addDelivered(d); markCol(p, DELIV_MARK_COL); }
     else if (d.type === 'visit') { addVisit(d); mark(p, 1); }
     else if (d.type === 'step') { updateVisit(d, '신청화면', FORM_AT_COL); mark(p, 2); }
@@ -310,6 +310,15 @@ function guideArrival(d) {
     L.getRange(i + 2, 9).setValue(now);
     if (!r[23]) L.getRange(i + 2, 24).setValue(now);
     L.getRange(i + 2, TRACK_COL).setValue('안내지 QR로 도착 확인 · ' + Utilities.formatDate(now, 'Asia/Seoul', 'M/d HH:mm'));
+  });
+}
+
+// 이 손님(회원ID) · 매장 편지 중 발송일(G)이 적힌 게 있는지. 없으면 아직 안 보낸 편지라 「내 편지」 열람은 시험으로 봄
+function letterSent(uid, store) {
+  var L = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('편지');
+  if (!L || L.getLastRow() < 2 || !uid) return false;
+  return L.getRange(2, 1, L.getLastRow() - 1, 16).getValues().some(function (r) {
+    return String(r[15]) === String(uid) && r[6] !== '' && (!store || !String(r[4]) || String(r[4]) === String(store));
   });
 }
 

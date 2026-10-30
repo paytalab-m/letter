@@ -567,9 +567,11 @@ function sendList(d) {
   var name = { arrive: '도착 알림 대상', remind: '리마인드 대상' }[d.kind];
   var sh = name && ss.getSheetByName(name);
   if (!sh) return { ok: false, reason: 'kind' };
+  // 자동 발송(B6=Y)이 켜져 있으면 손 발송 파일은 안 줌 — 두 길로 같은 사람에게 두 번 가지 않게(2026-10-30)
+  if (setting('B6').toUpperCase() === 'Y') return { ok: false, reason: '자동 발송이 켜져 있어(설정 B6=Y) 손 발송 명단은 안 줌' };
   var v = sh.getDataRange().getDisplayValues();
   var head = v.shift();
-  return { ok: true, head: head, rows: v.filter(function (r) { return r[0] && r[1]; }) };   // 「지금은 대상 없음」 줄은 뺌
+  return { ok: true, head: head, rows: eligible(d.kind, v.filter(function (r) { return r[0] && r[1]; })) };   // 「지금은 대상 없음」 줄은 뺌 · 1인 1회 거름
 }
 
 // 편지 인쇄 도구(print_letters.py) 전용. 주소가 오가므로 시트 숨김 탭 「설정」 B2 비밀번호가 맞을 때만 응답
@@ -978,22 +980,49 @@ function msgPost(code, reqs) {
 function msgTest(kind, uid) {
   var m = MSG[kind];
   if (!m || !uid) return { ok: false, err: 'kind · uid 필요' };
+  // 시험 발송은 「설정」 B9에 적힌 우리 쪽 시험 회원ID(쉼표로 여러 개)에게만. 비어 있으면 아무에게도 안 감
+  var ok = setting('B9').split(/[,\s]+/).filter(String).some(function (x) { return x === String(uid); });
+  if (!ok) return { ok: false, err: '설정 B9 시험 회원ID 목록에 없는 회원이라 안 보냄' };
   var link = shortLinks(['https://paytalab-m.github.io/letter/my-letter/?uid=' + encodeURIComponent(uid) + '&store=' + encodeURIComponent('테스트매장') + '&nick=' + encodeURIComponent('호야')], m.name + ' 시험')[0];
   return msgPost(m.code, [msgRequest(uid, m.vars(['', '호야', '10월 29일', '테스트매장', '11월 19일']), link)]);
+}
+
+// 1인 1회 · 관련 없는 사람 금지(2026-10-30 사용자 지시) — 대상 탭 수식과 따로, 보내기 직전에 코드가 한 번 더 거른다.
+//   ① 그 회원ID의 편지 중 발송일(G)이 적힌 게 있어야 함(우리가 실제로 편지를 부친 손님만)
+//   ② 회원 단위로 한 번: 그 회원의 편지 어느 줄이든 이미 표시(X · L)가 있으면 뺌 + 한 번 돌 때도 같은 회원ID는 한 줄만
+//   ③ 실제로 보낸 회원ID는 스크립트 속성(SENT_종류_회원ID)에 영구 기록 → 누가 시트 칸을 지워도 다시 안 감
+function eligible(kind, rows) {
+  var m = MSG[kind], L = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('편지');
+  if (!L || L.getLastRow() < 2) return [];
+  var sent = {}, done = {}, props = PropertiesService.getScriptProperties().getProperties(), seen = {};
+  L.getRange(2, 1, L.getLastRow() - 1, 24).getValues().forEach(function (r) {
+    var u = String(r[15]);
+    if (!u) return;
+    if (r[6] !== '') sent[u] = true;
+    if (r[m.mark - 1] !== '') done[u] = true;
+  });
+  return rows.filter(function (r) {
+    var u = String(r[0]);
+    if (!u || !sent[u] || done[u] || props['SENT_' + kind + '_' + u] || seen[u]) return false;
+    return (seen[u] = true);
+  });
 }
 
 function sendKind(kind, live) {
   var m = MSG[kind], ss = SpreadsheetApp.getActiveSpreadsheet();
   var T = ss.getSheetByName(m.tab);
   if (!T || T.getLastRow() < 2) return { n: 0, sent: 0 };
-  var rows = T.getRange(2, 1, T.getLastRow() - 1, 7).getDisplayValues().filter(function (r) { return r[0] && r[5] && r[6]; });   // 회원ID · 링크 · 편지코드
+  var rows = eligible(kind, T.getRange(2, 1, T.getLastRow() - 1, 7).getDisplayValues().filter(function (r) { return r[0] && r[5] && r[6]; }));   // 회원ID · 링크 · 편지코드
   if (!rows.length || !live) return { n: rows.length, sent: 0 };
+  // 보내기 전에 먼저 표시: 그 회원의 편지 모든 줄에 날짜 + 영구 기록. 발송이 실패해도 지우지 않음(두 번 가는 것보다 안 가는 게 나음 · 슬랙으로 알림)
+  var L = ss.getSheetByName('편지'), uids = L.getRange(2, 16, L.getLastRow() - 1, 1).getValues(), who = {}, today = new Date(), rec = {};
+  rows.forEach(function (r) { who[String(r[0])] = true; rec['SENT_' + kind + '_' + r[0]] = Utilities.formatDate(today, 'Asia/Seoul', 'yyyy-MM-dd HH:mm'); });
+  uids.forEach(function (u, i) { if (who[String(u[0])]) L.getRange(i + 2, m.mark).setValue(today); });
+  PropertiesService.getScriptProperties().setProperties(rec);
+  SpreadsheetApp.flush();
   var links = shortLinks(rows.map(function (r) { return r[5]; }), m.name + ' 자동');
   var res = msgPost(m.code, rows.map(function (r, i) { return msgRequest(r[0], m.vars(r), links[i]); }));
-  if (!res.ok) return { n: rows.length, sent: 0, err: 'HTTP ' + res.http + ' ' + res.body };
-  var L = ss.getSheetByName('편지'), codes = L.getRange(2, 1, L.getLastRow() - 1, 1).getValues(), at = {}, today = new Date();
-  codes.forEach(function (c, i) { at[String(c[0])] = i + 2; });
-  rows.forEach(function (r) { if (at[r[6]]) L.getRange(at[r[6]], m.mark).setValue(today); });
+  if (!res.ok) return { n: rows.length, sent: 0, err: 'HTTP ' + res.http + ' ' + res.body + ' · 다시 안 보내도록 표시는 남겨 둠(백오피스 발송 내역 확인 뒤 사람이 판단)' };
   return { n: rows.length, sent: rows.length };
 }
 
@@ -1031,6 +1060,12 @@ function predictArrivals() {
 }
 
 function dailyLetterJob() {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) return { ok: false, reason: '이미 도는 중' };   // 13 · 19시 트리거와 손으로 돌리기가 겹쳐 두 번 보내지 않게
+  try { return dailyLetterJobRun(); } finally { lock.releaseLock(); }
+}
+
+function dailyLetterJobRun() {
   var tr = trackArrivals(), pr = predictArrivals();
   var live = setting('B6').toUpperCase() === 'Y', out = { track: tr, predict: pr, live: live };
   ['arrive', 'remind'].forEach(function (k) { try { out[k] = sendKind(k, live); } catch (e) { out[k] = { n: 0, sent: 0, err: String(e) }; } });

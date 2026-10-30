@@ -634,9 +634,13 @@ function printOps(d) {
   }
   if (d.type === 'sent_mark') {   // 우체국에 접수한 편지코드들의 발송일(G) 기록 → 발송일 + 「마감 관리」 B25 영업일에 도착 알림톡(2026-10-29)
     var wantS = {}; (d.codes || []).forEach(function (c) { wantS[c] = true; });
-    var sd = d.date ? new Date(d.date + 'T00:00:00+09:00') : new Date(), cs = 0;
-    lv.forEach(function (r, i) { if (wantS[String(r[0])]) { L.getRange(i + 2, 7).setValue(sd); cs++; } });
-    return { ok: true, marked: cs, date: Utilities.formatDate(sd, 'Asia/Seoul', 'yyyy-MM-dd') };
+    var sd = d.date ? new Date(d.date + 'T00:00:00+09:00') : new Date(), cs = 0, st = staffIds(), skipS = 0;
+    lv.forEach(function (r, i) {
+      if (!wantS[String(r[0])]) return;
+      if (st[String(r[15])]) { skipS++; return; }   // 점주 의심 회원 편지는 발송일을 적지 않음(2026-10-30)
+      L.getRange(i + 2, 7).setValue(sd); cs++;
+    });
+    return { ok: true, marked: cs, skipped_staff: skipS, date: Utilities.formatDate(sd, 'Asia/Seoul', 'yyyy-MM-dd') };
   }
   var moved = screenWrongAddr();   // 받는 주소가 그 매장 주소인 신청은 인쇄 전에 「주소 오류」 탭으로 옮김(2026-10-29 결정)
   if (moved) { L = ss.getSheetByName('편지'); n = L.getLastRow() - 1; lv = n > 0 ? L.getRange(2, 1, n, LETTER_HEAD.length).getValues() : []; }
@@ -991,10 +995,17 @@ function msgTest(kind, uid) {
 //   ① 그 회원ID의 편지 중 발송일(G)이 적힌 게 있어야 함(우리가 실제로 편지를 부친 손님만)
 //   ② 회원 단위로 한 번: 그 회원의 편지 어느 줄이든 이미 표시(X · L)가 있으면 뺌 + 한 번 돌 때도 같은 회원ID는 한 줄만
 //   ③ 실제로 보낸 회원ID는 스크립트 속성(SENT_종류_회원ID)에 영구 기록 → 누가 시트 칸을 지워도 다시 안 감
+//   ④ 점주 의심(숨김 탭 「점주 의심」 A열) 회원은 뺌 — 인쇄 뒤에 의심 명단에 오른 경우까지(2026-10-30)
+function staffIds() {
+  var SU = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('점주 의심'), staff = {};
+  if (SU && SU.getLastRow() > 1) SU.getRange(2, 1, SU.getLastRow() - 1, 1).getValues().forEach(function (r) { if (r[0]) staff[String(r[0])] = true; });
+  return staff;
+}
+
 function eligible(kind, rows) {
   var m = MSG[kind], L = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('편지');
   if (!L || L.getLastRow() < 2) return [];
-  var sent = {}, done = {}, props = PropertiesService.getScriptProperties().getProperties(), seen = {};
+  var sent = {}, done = {}, props = PropertiesService.getScriptProperties().getProperties(), seen = {}, staff = staffIds();
   L.getRange(2, 1, L.getLastRow() - 1, 24).getValues().forEach(function (r) {
     var u = String(r[15]);
     if (!u) return;
@@ -1003,7 +1014,7 @@ function eligible(kind, rows) {
   });
   return rows.filter(function (r) {
     var u = String(r[0]);
-    if (!u || !sent[u] || done[u] || props['SENT_' + kind + '_' + u] || seen[u]) return false;
+    if (!u || staff[u] || !sent[u] || done[u] || props['SENT_' + kind + '_' + u] || seen[u]) return false;
     return (seen[u] = true);
   });
 }

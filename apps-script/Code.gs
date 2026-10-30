@@ -165,7 +165,8 @@ function doPost(e) {
       var brand = sn.replace(/(점|본점|직영점)$/, '').slice(0, 4);
       outK.push([String(r[0]), String(r[6]), k ? Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, k, Utilities.Charset.UTF_8).map(function (b) { return ('0' + (b & 255).toString(16)).slice(-2); }).join('').slice(0, 12) : '', brand.length >= 2 && an.indexOf(brand) >= 0 ? 1 : 0,
         /상가|1층|지하|매장|카페|커피|점\b/.test(full) ? 1 : 0, /아파트|apt|빌라|오피스텔|\d+동\s*\d+호|\d+-\d+호/i.test(full) ? 1 : 0,
-        String(r[17]).replace(/\D/g, '') ? sha12(String(r[17]).replace(/\D/g, '')) : '']);   // 상세주소의 숫자만(층 · 호수) 해시 → 매장 상세주소와 비교
+        String(r[17]).replace(/\D/g, '') ? sha12(String(r[17]).replace(/\D/g, '')) : '',   // 상세주소의 숫자만(층 · 호수) 해시 → 매장 상세주소와 비교
+        String(r[15]).replace(/\D/g, '') ? sha12(String(r[15]).replace(/\D/g, '')) : '']);   // 우편번호 해시(2026-10-30: 도로명을 못 읽은 주소도 매장 우편번호와 비교)
     });
     return ContentService.createTextOutput(JSON.stringify({ ok: true, rows: outK })).setMimeType(ContentService.MimeType.JSON);
   }

@@ -212,7 +212,7 @@ function doPost(e) {
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    if (d.type === 'scan') { addScan(d); markCol(p, QR_MARK_COL); }
+    if (d.type === 'scan') { if (lp && letterPosted(lp.row)) { addScan(d); markCol(p, QR_MARK_COL); } else res.test = true; }   // 발송일 전 점주 QR 접속 = 시험(시험 인쇄 확인) → 기록 안 함(2026-11-02)
     else if (d.type === 'inquiry' || d.type === 'contact_click') { addInquiry(d); markCol(p, INQ_MARK_COL); }
     else if (d.type === 'letter_view') { if (letterSent(d.uid, d.store)) { addLetterView(d); markCol(p, VIEW_MARK_COL); if (/utm_content=ltr_guide_qr/.test(String(d.ref || ''))) guideArrival(d); } else res.test = true; }   // 발송일 전 「내 편지」 열람 = 시험(시험 인쇄 · 도착 알림 링크 확인) → 기록 안 함(2026-10-30)
     else if (d.type === 'delivered') { addDelivered(d); markCol(p, DELIV_MARK_COL); }
@@ -311,6 +311,12 @@ function guideArrival(d) {
     if (!r[23]) L.getRange(i + 2, 24).setValue(now);
     L.getRange(i + 2, TRACK_COL).setValue('안내지 QR로 도착 확인 · ' + Utilities.formatDate(now, 'Asia/Seoul', 'M/d HH:mm'));
   });
+}
+
+// 「편지」 탭 그 줄의 발송일(G)이 적혔는지 = 우체국에 실제로 부친 편지인지
+function letterPosted(row) {
+  var L = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('편지');
+  return !!(L && row > 1 && L.getRange(row, 7).getValue() !== '');
 }
 
 // 이 손님(회원ID) · 매장 편지 중 발송일(G)이 적힌 게 있는지. 없으면 아직 안 보낸 편지라 「내 편지」 열람은 시험으로 봄

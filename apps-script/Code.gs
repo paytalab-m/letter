@@ -39,6 +39,7 @@ var STEPS = ['랜딩', '신청화면', '신청완료'];
 var STORE_CAP = 0;                    // 가게당 인원 마감 (예: 3). 0이면 안 씀
 var QUOTA = {};                       // 시험별 우편 정원 (예: { s: 1505, q: 801 }). 비우면 안 씀
 var QUOTA_ALL = 0;                    // 전체 정원. 0이면 안 씀
+var APPLY_CLOSED = true;              // 신청 전체 마감(2026-11-03 사용자 결정 · 모집 메시지 마감일은 10/31). 다시 받으려면 false로 바꾸고 새 버전 배포
 var APPLY_GRP_COL = 32;               // 「신청」 AF열 「시험」
 var LETTER_HEAD = ['신청번호', '신청시각', '열쇠', '매장ID', '매장', '닉네임', '발송일', '운송장번호', '도착일', '전달 기한', '문의 기한', '리마인드 발송일', '내 편지 링크', '점주 QR 링크', '메모', '회원ID', '시험', '편지 종류', 'QR 여부', '인쇄 회차', '인쇄일', '도착 알림 링크', '리마인드 링크', '도착 알림 발송일'];
 var PRINT_ROUND_COL = 20, PRINT_DATE_COL = 21; // 「편지」 T · U열
@@ -61,6 +62,8 @@ function doGet(e) {
     // 점주 페이지: 편지코드로 매장명 · 편지 전한 손님 닉네임 · 문의 기한만 돌려준다
     var lp = letter(q.code);
     if (lp) out = { ok: true, store: lp.store, nick: lp.nick, due: lp.due };
+  } else if (q.fix) {
+    out = fixInfo(String(q.fix));   // 주소 다시 적기 화면(letter/fix): 받는 주소 확인용 정보(상세 주소 · 이름 가림)
   } else if (q.closed) {
     // 모집 명단 채우기(fill_list.py): 신청이 가게당 마감 인원(「마감 관리」 B3) 이상인 가게ID만 돌려준다
     var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -88,6 +91,7 @@ function doGet(e) {
 
 function doPost(e) {
   var d = JSON.parse(e.postData.contents);
+  if (d.type === 'addr_fix') return ContentService.createTextOutput(JSON.stringify(addrFix(d))).setMimeType(ContentService.MimeType.JSON);
   if (d.type === 'print_list' || d.type === 'print_mark' || d.type === 'sent_mark') return ContentService.createTextOutput(JSON.stringify(printOps(d))).setMimeType(ContentService.MimeType.JSON);
   if (d.type === 'send_list') return ContentService.createTextOutput(JSON.stringify(sendList(d))).setMimeType(ContentService.MimeType.JSON);
   if (d.type === 'apply_slack_test') {   // 신청 알림 시험(비밀번호 = 「설정」 B2). 시트에는 아무것도 적지 않음
@@ -250,7 +254,8 @@ function status_(sid, grp, store, uid) {
     if (key && rk === key) { storeN++; if (uid && String(row[4]) === uid) o.dup = true; }
     if (grp && String(row[APPLY_GRP_COL - 1]) === grp) grpN++;
   });
-  if (grp && QUOTA[grp] && grpN >= QUOTA[grp]) { o.closed = true; o.reason = 'quota'; }
+  if (APPLY_CLOSED) { o.closed = true; o.reason = 'end'; }
+  else if (grp && QUOTA[grp] && grpN >= QUOTA[grp]) { o.closed = true; o.reason = 'quota'; }
   else if (QUOTA_ALL && v.length >= QUOTA_ALL) { o.closed = true; o.reason = 'quota'; }
   else if (STORE_CAP && key && storeN >= STORE_CAP) { o.closed = true; o.reason = 'store'; }
   return o;
@@ -609,10 +614,97 @@ function moveWrongAddr(codes, reason) {
 }
 
 // 아직 인쇄하지 않은 신청 중 받는 주소 = 매장 주소인 것을 찾아 옮김. 옮긴 수를 돌려줌
+// ── 주소 다시 적기(2026-11-02) ──────────────────────────────────────────
+// 「주소 오류」 탭 손님(받는 주소가 매장 주소이거나 그렇게 보임)에게 알림 메시지 → letter/fix/?code=신청번호 화면.
+//   new  : 집 주소를 새로 적음 → 그 줄을 「신청」 · 「편지」로 되돌림(다음 회차 인쇄 대상)
+//   keep : 「이 주소가 맞아요」 → 주소 그대로 되돌리고, 다음 인쇄 때 주소 오류로 다시 빼지 않음
+// 기록은 「주소 다시 적기」 탭. 이미 되돌린 뒤 다시 고치면(인쇄 전에만) 「신청」 줄의 주소를 바꿈
+var FIX_HEAD = ['시각', '신청번호', '선택', '매장', '받는 주소가 매장 주소와 같음'];
+var FIX_DUE_CELL = 'B27';   // 「마감 관리」 B27 = 주소 다시 적기 마감일(비면 안내에 날짜를 안 씀)
+var A_OFF = 2;              // 「주소 오류」 탭은 앞에 「옮긴 시각 · 사유」 두 칸이 더 있음
+
+function maskName(s) { s = String(s || ''); return s.length <= 1 ? s : s.charAt(0) + '○'.repeat(Math.min(3, s.length - 1)); }
+function maskAddr(s) { var p = String(s || '').trim().split(/\s+/); return p.length <= 2 ? p.join(' ') : p.slice(0, p.length - 1).join(' ') + ' ○○'; }
+
+function findFix(code) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), W = ss.getSheetByName('주소 오류'), A = ss.getSheetByName('신청');
+  if (W && W.getLastRow() > 1) {
+    var f = W.getRange('C:C').createTextFinder(code).matchEntireCell(true).matchCase(true).findNext();
+    if (f && f.getRow() > 1) return { where: 'wrong', sh: W, row: f.getRow(), v: W.getRange(f.getRow(), A_OFF + 1, 1, APPLY_HEAD.length).getValues()[0] };
+  }
+  if (A && A.getLastRow() > 1) {
+    var g = A.getRange('A:A').createTextFinder(code).matchEntireCell(true).matchCase(true).findNext();
+    if (g && g.getRow() > 1) return { where: 'apply', sh: A, row: g.getRow(), v: A.getRange(g.getRow(), 1, 1, APPLY_HEAD.length).getValues()[0] };
+  }
+  return null;
+}
+
+function fixDue() {
+  var MG = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('마감 관리'), v = MG ? MG.getRange(FIX_DUE_CELL).getValue() : '';
+  return v instanceof Date ? Utilities.formatDate(v, 'Asia/Seoul', 'yyyy-MM-dd') : (/^\d{4}-\d{2}-\d{2}$/.test(String(v).trim()) ? String(v).trim() : '');
+}
+
+function fixInfo(code) {
+  var f = code && findFix(code);
+  if (!f) return { ok: false, reason: 'none' };
+  var L = letter(code), printed = L && L.row && SpreadsheetApp.getActiveSpreadsheet().getSheetByName('편지').getRange(L.row, PRINT_DATE_COL).getValue();
+  return { ok: true, state: f.where === 'wrong' ? 'pending' : (printed ? 'printed' : 'fixed'), nick: String(f.v[12] || ''), store: String(f.v[9] || ''),
+           name: maskName(f.v[14]), addr: maskAddr(f.v[16]), due: fixDue() };
+}
+
+// 「편지 매장 주소」 키와 같은지(받는 주소 = 그 매장 주소)
+function sameAsStore(sid, addr) {
+  var K = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('편지 매장 주소'), k = addrKey(addr);
+  if (!K || K.getLastRow() < 2 || !k) return false;
+  return K.getRange(2, 1, K.getLastRow() - 1, 2).getValues().some(function (r) { return String(r[0]) === String(sid) && String(r[1]) === k; });
+}
+
+function addrFix(d) {
+  var code = String(d.c || ''), kind = d.kind === 'keep' ? 'keep' : 'new';
+  var lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    var f = code && findFix(code);
+    if (!f) return { ok: false, reason: 'none' };
+    var ss = SpreadsheetApp.getActiveSpreadsheet(), v = f.v.slice(), sid = String(v[6]);
+    if (kind === 'new') {
+      if (!String(d.name || '').trim() || !String(d.addr || '').trim()) return { ok: false, reason: 'empty' };
+      if (!d.force && sameAsStore(sid, d.addr)) return { ok: false, reason: 'store_addr', store: String(v[9]) };
+      v[14] = "'" + String(d.name).trim(); v[15] = "'" + String(d.zip || '').trim(); v[16] = "'" + String(d.addr).trim(); v[17] = "'" + String(d.addr2 || '').trim();
+    }
+    var same = sameAsStore(sid, kind === 'new' ? d.addr : v[16]) ? 'Y' : 'N';
+    if (f.where === 'wrong') {
+      v[30] = (v[30] ? v[30] + ' · ' : '') + (kind === 'keep' ? '주소 확인함(이 주소가 맞아요) ' : '주소 다시 적음 ') + Utilities.formatDate(new Date(), 'Asia/Seoul', 'M/d');
+      sheet('신청', APPLY_HEAD).appendRow(v);
+      addLetterFromApply(v);
+      f.sh.deleteRow(f.row);
+    } else {
+      var L = letter(code);
+      if (L && ss.getSheetByName('편지').getRange(L.row, PRINT_DATE_COL).getValue()) return { ok: false, reason: 'printed' };
+      if (kind === 'new') f.sh.getRange(f.row, 15, 1, 4).setValues([[v[14], v[15], v[16], v[17]]]);
+    }
+    sheet('주소 다시 적기', FIX_HEAD).appendRow([new Date(), code, kind === 'keep' ? '이 주소가 맞아요' : '새 주소', String(v[9]), same]);
+    return { ok: true, kind: kind };
+  } finally { lock.releaseLock(); }
+}
+
+// 「주소 오류」에서 되돌린 신청 한 줄로 「편지」 줄을 다시 만듦(addLetter와 같은 꼴 · 편지 종류 · QR 여부는 신청 줄 값 그대로)
+function addLetterFromApply(v) {
+  addLetter({ vid: String(v[0]).replace(/^'/, ''), ts: v[1] instanceof Date ? v[1].toISOString() : '', t: String(v[5]).replace(/^'/, ''), sid: String(v[6]).replace(/^'/, ''),
+              store: String(v[9]).replace(/^'/, ''), nick: String(v[12]).replace(/^'/, ''), uid: String(v[4]).replace(/^'/, ''), grp: String(v[31]),
+              la: String(v[32]).replace('편지 ', ''), qr: v[33] === 'QR 있음' ? '1' : v[33] === 'QR 없음' ? '0' : '' });
+}
+
+// 「이 주소가 맞아요」로 확인한 신청번호 → 다음 인쇄 때 주소 오류로 다시 빼지 않음
+function addrConfirmed() {
+  var F = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('주소 다시 적기'), ok = {};
+  if (F && F.getLastRow() > 1) F.getRange(2, 2, F.getLastRow() - 1, 2).getValues().forEach(function (r) { if (r[1] === '이 주소가 맞아요') ok[String(r[0])] = true; });
+  return ok;
+}
+
 function screenWrongAddr() {
   var ss = SpreadsheetApp.getActiveSpreadsheet(), K = ss.getSheetByName('편지 매장 주소'), A = ss.getSheetByName('신청'), L = ss.getSheetByName('편지');
   if (!K || K.getLastRow() < 2 || !A || A.getLastRow() < 2) return 0;
-  var key = {}, printed = {}, codes = [];
+  var key = {}, printed = addrConfirmed(), codes = [];   // 「이 주소가 맞아요」 확인한 신청도 건너뜀(2026-11-02)
   K.getRange(2, 1, K.getLastRow() - 1, 2).getValues().forEach(function (r) { if (r[0] && r[1]) key[String(r[0])] = String(r[1]); });
   if (L && L.getLastRow() > 1) L.getRange(2, 1, L.getLastRow() - 1, PRINT_DATE_COL).getValues().forEach(function (r) { if (r[PRINT_DATE_COL - 1]) printed[String(r[0])] = true; });
   A.getRange(2, 1, A.getLastRow() - 1, 18).getValues().forEach(function (r) {

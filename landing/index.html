@@ -345,11 +345,11 @@ document.querySelectorAll('[data-cfg]').forEach(e=>{if(CONFIG[e.dataset.cfg])e.t
 // 마감: 가게당 신청 3명 · 시험별 우편 정원(Code.gs의 STORE_CAP · QUOTA). 시트 숫자를 읽어 판단함
 const SID=Q.get('sid')||'',GRP=Q.get('grp')||'';
 function showClosed(reason){
-  if(reason==='quota'){document.getElementById('closedH').textContent='이번 편지 신청이 모두 마감됐어요';document.getElementById('closedP').innerHTML='준비한 편지가 모두 신청됐어요.<br>관심 가져 주셔서 고마워요.';}
+  if(reason!=='store'){document.getElementById('closedH').textContent='이번 편지 신청이 모두 마감됐어요';document.getElementById('closedP').innerHTML='준비한 편지가 모두 신청됐어요.<br>관심 가져 주셔서 고마워요.';}
   go('v-closed');
 }
-// 신청 마감은 랜딩에서 막지 않음 (마감 조회 꺼둠)
-if(false&&CONFIG.SUBMIT_URL){fetch(CONFIG.SUBMIT_URL+'?store_id='+encodeURIComponent(SID)+'&grp='+encodeURIComponent(GRP)+'&store='+encodeURIComponent(DATA.store)).then(r=>r.json()).then(j=>{if(j&&j.closed)showClosed(j.reason);}).catch(()=>{});}
+// 신청 마감 조회: 서버가 마감(전체 마감 'end' · 정원 'quota' · 가게 'store')이면 들어오자마자 마감 화면(2026-11-03 다시 켬)
+if(CONFIG.SUBMIT_URL){fetch(CONFIG.SUBMIT_URL+'?store_id='+encodeURIComponent(SID)+'&grp='+encodeURIComponent(GRP)+'&store='+encodeURIComponent(DATA.store)).then(r=>r.json()).then(j=>{if(j&&j.closed)showClosed(j.reason);}).catch(()=>{});}
 {const m={call:'패스오더에서 이 카페에 전화하신 적 있는',intro:'패스오더에서 이 카페의 앱 주문을 요청하신'};const src=Q.get('src');document.querySelectorAll('[data-src]').forEach(e=>{e.textContent=m[src]||'패스오더에서 이 카페를 찾으신';});}
 
 function findAddr(){new daum.Postcode({oncomplete:d=>{zip.value=d.zonecode;addr.value=d.roadAddress||d.jibunAddress;addr2.focus();checkStoreAddr(d.roadAddress||d.jibunAddress);}}).open();}

@@ -32,7 +32,7 @@ var VISIT_HEAD = ['방문ID', '진입시각', '회원ID', '열쇠', '매장ID', 
 var DELIV_HEAD = ['기록시각', '열쇠', '회원ID', '매장ID', '매장', '닉네임', '건넨 날', '누구에게', '신청번호', '기기', '열린 앱', '유입 URL', '참여쿠폰 지급일', '메모', '건넨 뒤 체크'];
 var STEP_COL = 11, FORM_AT_COL = 12, APPLY_AT_COL = 13; // 「방문」의 도달 단계 · 신청화면 진입시각 · 신청시각 열
 var DELIV_MARK_COL = 14; // 「모집대상」 N열 「전달 기록」
-var VIEW_HEAD = ['열람시각', '열쇠', '회원ID', '매장ID', '매장', '전달 기한', '이미 기록함', '기기', '열린 앱', '유입 URL', '들어온 메시지'];
+var VIEW_HEAD = ['열람시각', '열쇠', '회원ID', '매장ID', '매장', '전달 기한', '이미 기록함', '기기', '열린 앱', '유입 URL', '들어온 메시지', '브라우저 번호', '기기 특징'];
 var VIEW_MARK_COL = 15; // 「모집대상」 O열 「내 편지 열람」
 var STEPS = ['랜딩', '신청화면', '신청완료'];
 // 마감 규칙: 랜딩에서 신청 마감을 막지 않음 (2026-10-23 사용자 결정). 다시 켜려면 숫자를 넣고 새 버전 배포
@@ -45,8 +45,8 @@ var APPLY_GRP_COL = 32;               // 「신청」 AF열 「시험」
 var LETTER_HEAD = ['신청번호', '신청시각', '열쇠', '매장ID', '매장', '닉네임', '발송일', '운송장번호', '도착일', '전달 기한', '문의 기한', '리마인드 발송일', '내 편지 링크', '점주 QR 링크', '메모', '회원ID', '시험', '편지 종류', 'QR 여부', '인쇄 회차', '인쇄일', '도착 알림 링크', '리마인드 링크', '도착 알림 발송일'];
 var PRINT_ROUND_COL = 20, PRINT_DATE_COL = 21; // 「편지」 T · U열
 var GUIDE_COL = 26;   // 「편지」 Z열 「안내지 QR 주소」(손님 안내지 QR = 그 손님의 「내 편지」 짧은 주소)
-var SCAN_HEAD = ['접속시각', '편지코드', '열쇠', '매장ID', '매장', '손님 전달 기록 있음', '기기', '열린 앱', '유입 URL'];
-var INQ_HEAD = ['접수시각', '편지코드', '열쇠', '매장ID', '매장', '손님 닉네임', '전화번호', '통화 시간대', '매장 첫 문의', '기기', '유입 URL', '처리상태', '첫 통화일', '결과', '성공쿠폰 지급일', '메모', '다시 보냄', '슬랙 알림'];
+var SCAN_HEAD = ['접속시각', '편지코드', '열쇠', '매장ID', '매장', '손님 전달 기록 있음', '기기', '열린 앱', '유입 URL', '브라우저 번호', '기기 특징', '신청자 판정'];
+var INQ_HEAD = ['접수시각', '편지코드', '열쇠', '매장ID', '매장', '손님 닉네임', '전화번호', '통화 시간대', '매장 첫 문의', '기기', '유입 URL', '처리상태', '첫 통화일', '결과', '성공쿠폰 지급일', '메모', '다시 보냄', '슬랙 알림', '브라우저 번호', '기기 특징', '신청자 판정'];
 var QR_MARK_COL = 16, INQ_MARK_COL = 17; // 「모집대상」 P열 「QR 접속」 · Q열 「사장님 문의」
 // 링크 주소 (정식 계정으로 옮기면 여기 두 줄만 바꾼다)
 var MYLETTER_URL = 'https://paytalab-m.github.io/letter/my-letter/';
@@ -338,7 +338,7 @@ function addLetterView(d) {
   var sh = sheet('열람', VIEW_HEAD);
   sh.getRange(sh.getLastRow() + 1, 1, 1, VIEW_HEAD.length).setValues([[
     at(d.ts), txt(d.t), txt(d.uid), txt(d.sid), txt(d.store), txt(d.due),
-    d.recorded ? 'Y' : 'N', txt(d.device), txt(d.app), txt(d.ref), msgOf(d.ref)
+    d.recorded ? 'Y' : 'N', txt(d.device), txt(d.app), txt(d.ref), msgOf(d.ref), txt(d.bid), txt(d.sig)
   ]]);
 }
 
@@ -400,8 +400,30 @@ function addScan(d) {
   var hit = function (col, v) { return v && dsh.getRange(col).createTextFinder(String(v)).matchEntireCell(true).findNext(); };
   var delivered = hit('B:B', d.t) || hit('C:C', d.uid) ? 'Y' : 'N'; // 열쇠 또는 회원ID로 찾음
   sh.getRange(sh.getLastRow() + 1, 1, 1, SCAN_HEAD.length).setValues([[
-    at(d.ts), txt(d.c), txt(d.t), txt(d.sid), txt(d.store), delivered, txt(d.device), txt(d.app), txt(d.ref)
+    at(d.ts), txt(d.c), txt(d.t), txt(d.sid), txt(d.store), delivered, txt(d.device), txt(d.app), txt(d.ref), txt(d.bid), txt(d.sig), applicantJudge(d)
   ]]);
+}
+
+// 사장님 QR 접속 · 문의가 편지 신청 손님 본인인지(2026-11-10): 「열람」 탭에서 같은 회원ID가 남긴 브라우저 번호 · 기기 특징과 비교
+// 브라우저 번호가 같으면 확정. 앱이 달라 번호가 다르면 기기 특징(OS · 화면 · 배율 · 언어 · 시간대 · 코어 수)으로 가능성만 표시
+function applicantJudge(d) {
+  var uid = String(d.uid || ''), bid = String(d.bid || ''), sig = String(d.sig || '');
+  if (!bid && !sig) return '구분 안 됨 (예전 페이지 접속)';
+  if (!uid) return '구분 안 됨 (신청 손님 모름)';
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('열람');
+  if (!sh || sh.getLastRow() < 2) return '구분 안 됨 (신청 손님 「내 편지」 열람 기록 없음)';
+  var now = d.ts ? new Date(d.ts) : new Date(), same = false, near = null, cmp = 0;
+  sh.getRange('C:C').createTextFinder(uid).matchEntireCell(true).findAll().forEach(function (h) {
+    if (h.getRow() === 1) return;
+    var v = sh.getRange(h.getRow(), 1, 1, VIEW_HEAD.length).getValues()[0], vb = String(v[11] || ''), vs = String(v[12] || '');
+    if (!vb && !vs) return;   // 예전 열람(번호 없음)은 비교 못 함
+    cmp++;
+    if (bid && vb === bid) same = true;
+    else if (sig && vs === sig && v[0] instanceof Date) { var m = Math.abs(now - v[0]) / 60000; if (near === null || m < near) near = m; }
+  });
+  if (same) return '신청 손님 본인 확정 (같은 브라우저)';
+  if (near !== null) return (near <= 30 ? '신청 손님 본인 가능성 높음' : '신청 손님 본인 가능성 있음') + ' (같은 기기 · 「내 편지」 열람과 ' + Math.round(near) + '분 차이)';
+  return cmp ? '다른 기기로 보임 (신청 손님이 아닐 가능성 높음)' : '구분 안 됨 (신청 손님 「내 편지」 열람 기록 없음)';
 }
 
 // 전화 안내 신청. 같은 매장의 첫 문의면 「매장 첫 문의」 Y (10,000원 쿠폰 귀속 후보)
@@ -409,10 +431,11 @@ function addInquiry(d) {
   var sh = sheet('문의', INQ_HEAD);
   var first = d.sid && sh.getRange('D:D').createTextFinder(String(d.sid)).matchEntireCell(true).findNext() ? 'N' : 'Y';
   var who = d.type === 'inquiry' ? whoCalls(d) : '';
+  d.judge = applicantJudge(d);
   var slack = d.type === 'inquiry' ? notifySlack(d, first, who) : '';
   sh.getRange(sh.getLastRow() + 1, 1, 1, INQ_HEAD.length).setValues([[
     at(d.ts), txt(d.c), txt(d.t), txt(d.sid), txt(d.store), txt(d.nick), txt(d.tel), txt(d.time), first,
-    txt(d.device), txt(d.ref), d.type === 'contact_click' ? 'biz 이동' : '접수', '', '', '', who ? '번호 확인: ' + who : '', d.edit ? 'Y' : '', slack
+    txt(d.device), txt(d.ref), d.type === 'contact_click' ? 'biz 이동' : '접수', '', '', '', who ? '번호 확인: ' + who : '', d.edit ? 'Y' : '', slack, txt(d.bid), txt(d.sig), d.judge
   ]]);
 }
 
@@ -557,6 +580,7 @@ function notifySlack(d, first, who) {
     '*연락처: ' + (tel || '-') + '*',
     '*통화 희망: ' + (d.time || '-') + '*',
     who ? '*번호 확인: ' + who + '*' : null,
+    d.judge ? '브라우저 확인: ' + d.judge : null,
     '매장: ' + store + ' (' + (i.sid || d.sid || '-') + ')',
     '',
     '편지 전한 손님: ' + (i.nick || d.nick || '-'),
@@ -864,6 +888,7 @@ function sheet(name, head) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sh = ss.getSheetByName(name);
   if (!sh) { sh = ss.insertSheet(name); sh.appendRow(head); sh.setFrozenRows(1); }
+  else if (sh.getLastColumn() < head.length) sh.getRange(1, sh.getLastColumn() + 1, 1, head.length - sh.getLastColumn()).setValues([head.slice(sh.getLastColumn())]);   // 새로 붙인 칸 머리글(2026-11-10)
   return sh;
 }
 

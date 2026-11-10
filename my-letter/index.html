@@ -385,9 +385,12 @@ document.getElementById('left').textContent=left>0?left+'일 남았어요':left=
 const UA=navigator.userAgent;
 const DEVICE=/iPhone|iPad|iPod/.test(UA)?'iOS':/Android/.test(UA)?'Android':'PC';
 const APP=/KAKAOTALK/i.test(UA)?'카카오톡':/NAVER\(inapp/i.test(UA)?'네이버':/Instagram/i.test(UA)?'인스타그램':/FBAN|FBAV/.test(UA)?'페이스북':'일반 브라우저';
+// 신청자 본인 구분(2026-11-10): 브라우저 번호 = 이 브라우저에 한 번 만들어 저장하는 무작위 값(이름 · 번호 등 개인 정보 없음). 기기 특징 = 같은 폰이면 앱이 달라도 같게 나오는 값(OS · 화면 크기 · 배율 · 언어 · 시간대 · 코어 수)
+let BID='';try{BID=localStorage.getItem('ltr_bid')||'';if(!BID){BID=('B'+Date.now().toString(36)+Math.random().toString(36).slice(2,8)).toUpperCase();localStorage.setItem('ltr_bid',BID);}}catch(e){}
+const SIG=[DEVICE,Math.min(screen.width,screen.height)+'x'+Math.max(screen.width,screen.height)+'@'+Math.round((window.devicePixelRatio||1)*100)/100,navigator.language||'',new Date().getTimezoneOffset(),navigator.hardwareConcurrency||''].join('|');
 const KEY='letter_done_'+(new URLSearchParams(location.search).get('uid')||'x');
 // 열람 기록: 열 때마다 「열람」에 한 줄 (손님 링크로 들어왔을 때만)
-if(CONFIG.SUBMIT_URL&&Q.get('uid')){let rec=false;try{rec=!!localStorage.getItem(KEY);}catch(e){}fetch(CONFIG.SUBMIT_URL,{method:'POST',mode:'no-cors',keepalive:true,headers:{'Content-Type':'text/plain'},body:JSON.stringify({type:'letter_view',ts:new Date().toISOString(),uid:Q.get('uid'),store:DATA.store,due:DATA.due,recorded:rec,device:DEVICE,app:APP,ref:location.href})}).catch(()=>{});}
+if(CONFIG.SUBMIT_URL&&Q.get('uid')){let rec=false;try{rec=!!localStorage.getItem(KEY);}catch(e){}fetch(CONFIG.SUBMIT_URL,{method:'POST',mode:'no-cors',keepalive:true,headers:{'Content-Type':'text/plain'},body:JSON.stringify({type:'letter_view',ts:new Date().toISOString(),uid:Q.get('uid'),store:DATA.store,due:DATA.due,recorded:rec,device:DEVICE,app:APP,bid:BID,sig:SIG,ref:location.href})}).catch(()=>{});}
 const WD='일월화수목금토';
 (function(){const box=document.getElementById('days');const t=new Date(DATA.today);let h='';
 for(let i=0;i<7;i++){const d=new Date(t);d.setDate(t.getDate()-i);const v=d.toISOString().slice(0,10);if(DATA.sent&&v<DATA.sent)break;
@@ -417,7 +420,7 @@ function record(){
   const label=(d.getMonth()+1)+'월 '+d.getDate()+'일';
   paint(label,m);
   try{localStorage.setItem(KEY,JSON.stringify({label,m,v:d.toISOString().slice(0,10)}))}catch(e){}
-  const body={type:'delivered',ts:new Date().toISOString(),uid:Q.get('uid')||'',store:DATA.store,nick:DATA.nick,when:d.toISOString().slice(0,10),whom:m,confirm:true,device:DEVICE,app:APP,ref:location.href};
+  const body={type:'delivered',ts:new Date().toISOString(),uid:Q.get('uid')||'',store:DATA.store,nick:DATA.nick,when:d.toISOString().slice(0,10),whom:m,confirm:true,device:DEVICE,app:APP,bid:BID,sig:SIG,ref:location.href};
   // ponytail: Apps Script는 no-cors라 응답을 못 읽음. 네트워크 오류만 실패로 본다.
   if(CONFIG.SUBMIT_URL)fetch(CONFIG.SUBMIT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(body)}).catch(()=>{});
   show(true);

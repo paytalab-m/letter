@@ -93,7 +93,7 @@ function doGet(e) {
 function doPost(e) {
   var d = JSON.parse(e.postData.contents);
   if (d.type === 'addr_fix') return ContentService.createTextOutput(JSON.stringify(addrFix(d))).setMimeType(ContentService.MimeType.JSON);
-  if (d.type === 'print_list' || d.type === 'print_mark' || d.type === 'sent_mark' || d.type === 'letter_ids' || d.type === 'phone_keys_put') return ContentService.createTextOutput(JSON.stringify(printOps(d))).setMimeType(ContentService.MimeType.JSON);
+  if (d.type === 'print_list' || d.type === 'print_mark' || d.type === 'sent_mark' || d.type === 'letter_ids' || d.type === 'phone_keys_put' || d.type === 'letter_text_put' || d.type === 'inq_slack_test') return ContentService.createTextOutput(JSON.stringify(printOps(d))).setMimeType(ContentService.MimeType.JSON);
   if (d.type === 'send_list') return ContentService.createTextOutput(JSON.stringify(sendList(d))).setMimeType(ContentService.MimeType.JSON);
   if (d.type === 'apply_slack_test') {   // 신청 알림 시험(비밀번호 = 「설정」 B2). 시트에는 아무것도 적지 않음
     var ok = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
@@ -420,6 +420,38 @@ function addInquiry(d) {
 // 숨김 탭 「번호 대조」: 종류(cust = 편지 신청 손님 회원ID · owner = 매장ID의 점주 · 대표 · 매니저 · 직원 번호) · ID · 번호 키(SHA-256 앞 12자, phoneHash와 같음)
 // 키는 print_letters 쪽 스크립트가 Snowflake로 만들어 phone_keys_put으로 넣음. 번호 원본은 이 탭에 없음
 var KEY_HEAD = ['종류', 'ID', '번호 키'];
+// 숨김 탭 「편지 문구」: 인쇄한 편지 본문(인쇄 도구 letter_texts.py가 build.py와 같은 규칙으로 만들어 넣음 · 이름 · 주소 · 전화 없음)
+var TEXT_HEAD = ['편지코드', '작업 번호', '편지', 'QR 안내', '본문'];
+var QR_CH = 'C0CBDHT27BM';   // #편지_qr_문의 (봇이 글을 올려 스레드 답글을 달 수 있게 · 2026-11-10)
+function putLetterTexts(rows) {
+  var sh = sheet('편지 문구', TEXT_HEAD);
+  if (!sh.isSheetHidden()) sh.hideSheet();
+  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, TEXT_HEAD.length).clearContent();
+  var v = (rows || []).filter(function (r) { return r && r.length === 5 && r[0]; }).map(function (r) { return r.map(String); });
+  if (v.length) sh.getRange(2, 1, v.length, TEXT_HEAD.length).setNumberFormat('@').setValues(v);
+  return v.length;
+}
+function letterText(code) {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('편지 문구');
+  if (!sh || !code) return null;
+  var hit = sh.getRange('A:A').createTextFinder(String(code)).matchEntireCell(true).findNext();
+  return hit && hit.getRow() > 1 ? sh.getRange(hit.getRow(), 1, 1, TEXT_HEAD.length).getValues()[0] : null;
+}
+// 스레드 답글: 이 매장에 간 편지(종류 · 발송 · 기한 · 본문 · QR 안내)
+function letterThread(d, i) {
+  var t = letterText(d.c), L = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('편지'), sent = '', due = '';
+  var hit = L && d.c ? L.getRange('A:A').createTextFinder(String(d.c)).matchEntireCell(true).findNext() : null;
+  if (hit && hit.getRow() > 1) { var r = L.getRange(hit.getRow(), 1, 1, 10).getValues()[0]; sent = md(r[6]); due = md(r[9]); }
+  if (!t) return '*이 매장에 간 편지*\n편지 문구를 찾지 못함(편지코드 ' + (d.c || '-') + ')';
+  return ['*이 매장에 간 편지*',
+    '편지: ' + t[2] + ' · ' + (t[3] === 'QR 없음' ? 'QR 없음' : 'QR 있음') + ' · 작업 번호 ' + (t[1] || '-'),
+    '우편 발송: ' + (sent || '-') + ' / 손님 전달 기한: ' + (due || '-'),
+    '',
+    '_편지 본문(손글씨)_',
+    String(t[4]).split('\n').map(function (x) { return '> ' + x; }).join('\n'),
+    t[3] === 'QR 없음' ? '' : '\n_편지 아래 안내(일반 글씨)_\n> ' + t[3]
+  ].join('\n');
+}
 function putPhoneKeys(rows) {
   var sh = sheet('번호 대조', KEY_HEAD);
   if (!sh.isSheetHidden()) sh.hideSheet();
@@ -513,7 +545,6 @@ function letterInfo(code, uid) {
 
 function notifySlack(d, first, who) {
   var url = slackUrl();
-  if (!url) return '';
   var i = letterInfo(d.c, d.uid);
   var tel = String(d.tel || '').replace(/\D/g, '').replace(/^(\d{3})(\d{3,4})(\d{4})$/, '$1-$2-$3');
   var exp = [GRP_LABEL[i.grp] || i.grp, i.letter, i.qr].filter(String).join(', ') || '-';
@@ -521,7 +552,7 @@ function notifySlack(d, first, who) {
   // 슬랙 알림: 전화하는 사람이 볼 순서(누구에게 · 언제 → 통화 때 말할 내용 → 분석용 참고). 이모지 없이 「항목: 값」 한 줄에 하나,
   // 묶음 사이는 빈 줄, 연락처 · 통화 희망만 굵게. 날짜는 「10월 23일」로 통일
   var lines = [
-    '*편지 QR 문의 · ' + store + (d.edit ? ' (연락처 수정)' : '') + '*',
+    '*' + (d.test ? '[시험] ' : '') + '편지 QR 문의 · ' + store + (d.edit ? ' (연락처 수정)' : '') + '*',
     '',
     '*연락처: ' + (tel || '-') + '*',
     '*통화 희망: ' + (d.time || '-') + '*',
@@ -537,10 +568,22 @@ function notifySlack(d, first, who) {
     '모집 소구: ' + (i.g ? (G_LABEL[i.g] || i.g) : '-') + ' / 손님 경로: ' + (SRC_LABEL[i.src] || i.src || '-') + ' / 차수: ' + (i.wave ? i.wave + '차' : '-'),
     '편지 도착: ' + (i.arrive || '-') + ' / 편지코드: ' + (d.c || '-') + ' / 회원ID: ' + (i.uid || '-')
   ].filter(function (x) { return x !== null; });
+  var text = lines.join('\n'), why = '';
+  try {   // 봇으로 올려야 ts가 생겨 스레드 답글(이 매장에 간 편지)을 달 수 있음(2026-11-10). 안 되면 예전처럼 웹후크
+    if (setting('B7')) {
+      var m = slackApi('chat.postMessage', { channel: QR_CH, text: text, unfurl_links: false });
+      if (m.ok) {
+        var th = slackApi('chat.postMessage', { channel: QR_CH, thread_ts: m.ts, text: letterThread(d, i), unfurl_links: false });
+        return th.ok ? 'Y · 스레드 Y' : 'Y · 스레드 실패 ' + th.error;
+      }
+      why = ' (봇 ' + m.error + ' → 웹후크)';
+    }
+  } catch (e) { why = ' (봇 오류 → 웹후크)'; }
+  if (!url) return '실패' + why;
   try {
-    var r = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify({ text: lines.join('\n') }), muteHttpExceptions: true });
-    return r.getResponseCode() === 200 ? 'Y' : '실패 ' + r.getResponseCode();
-  } catch (err) { return '실패'; }
+    var r = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify({ text: text }), muteHttpExceptions: true });
+    return (r.getResponseCode() === 200 ? 'Y' : '실패 ' + r.getResponseCode()) + why;
+  } catch (err) { return '실패' + why; }
 }
 
 // 손님 신청 → 슬랙 #편지-신청자-알림. 받는 분 · 주소 · 우편번호는 넣지 않음. 담당자 확인 링크(utm_term ltr_selftest)로 온 신청은 제목에 표시
@@ -753,6 +796,8 @@ function printOps(d) {
   var L = ss.getSheetByName('편지');
   var n = L.getLastRow() - 1;
   if (d.type === 'phone_keys_put') return { ok: true, written: putPhoneKeys(d.rows) };
+  if (d.type === 'letter_text_put') return { ok: true, written: putLetterTexts(d.rows) };
+  if (d.type === 'inq_slack_test') return { ok: true, slack: notifySlack({ type: 'inquiry', test: true, c: d.c, store: '테스트 매장', tel: '01000000000', time: '시험 발송', nick: '' }, 'Y', '시험 · 번호 확인 줄이 여기에 나옴') };   // 시트에 적지 않음
   if (n < 1) return { ok: true, rows: [], round: 1 };
   var lv = L.getRange(2, 1, n, LETTER_HEAD.length).getValues();
   if (d.type === 'letter_ids') return { ok: true, rows: lv.filter(function (r) { return r[0]; }).map(function (r) { return [String(r[0]), String(r[15]), String(r[3])]; }) };   // 편지코드 · 회원ID · 매장ID(번호 대조 키 만들기용 · 2026-11-10)

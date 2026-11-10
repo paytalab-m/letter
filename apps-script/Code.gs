@@ -93,7 +93,7 @@ function doGet(e) {
 function doPost(e) {
   var d = JSON.parse(e.postData.contents);
   if (d.type === 'addr_fix') return ContentService.createTextOutput(JSON.stringify(addrFix(d))).setMimeType(ContentService.MimeType.JSON);
-  if (d.type === 'print_list' || d.type === 'print_mark' || d.type === 'sent_mark') return ContentService.createTextOutput(JSON.stringify(printOps(d))).setMimeType(ContentService.MimeType.JSON);
+  if (d.type === 'print_list' || d.type === 'print_mark' || d.type === 'sent_mark' || d.type === 'letter_ids' || d.type === 'phone_keys_put') return ContentService.createTextOutput(JSON.stringify(printOps(d))).setMimeType(ContentService.MimeType.JSON);
   if (d.type === 'send_list') return ContentService.createTextOutput(JSON.stringify(sendList(d))).setMimeType(ContentService.MimeType.JSON);
   if (d.type === 'apply_slack_test') {   // 신청 알림 시험(비밀번호 = 「설정」 B2). 시트에는 아무것도 적지 않음
     var ok = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
@@ -408,11 +408,41 @@ function addScan(d) {
 function addInquiry(d) {
   var sh = sheet('문의', INQ_HEAD);
   var first = d.sid && sh.getRange('D:D').createTextFinder(String(d.sid)).matchEntireCell(true).findNext() ? 'N' : 'Y';
-  var slack = d.type === 'inquiry' ? notifySlack(d, first) : '';
+  var who = d.type === 'inquiry' ? whoCalls(d) : '';
+  var slack = d.type === 'inquiry' ? notifySlack(d, first, who) : '';
   sh.getRange(sh.getLastRow() + 1, 1, 1, INQ_HEAD.length).setValues([[
     at(d.ts), txt(d.c), txt(d.t), txt(d.sid), txt(d.store), txt(d.nick), txt(d.tel), txt(d.time), first,
-    txt(d.device), txt(d.ref), d.type === 'contact_click' ? 'biz 이동' : '접수', '', '', '', '', d.edit ? 'Y' : '', slack
+    txt(d.device), txt(d.ref), d.type === 'contact_click' ? 'biz 이동' : '접수', '', '', '', who ? '번호 확인: ' + who : '', d.edit ? 'Y' : '', slack
   ]]);
+}
+
+// ── 문의 번호 확인(2026-11-10 · 영업팀이 손님 본인 문의를 사장님 문의로 헷갈림) ──────────────
+// 숨김 탭 「번호 대조」: 종류(cust = 편지 신청 손님 회원ID · owner = 매장ID의 점주 · 대표 · 매니저 · 직원 번호) · ID · 번호 키(SHA-256 앞 12자, phoneHash와 같음)
+// 키는 print_letters 쪽 스크립트가 Snowflake로 만들어 phone_keys_put으로 넣음. 번호 원본은 이 탭에 없음
+var KEY_HEAD = ['종류', 'ID', '번호 키'];
+function putPhoneKeys(rows) {
+  var sh = sheet('번호 대조', KEY_HEAD);
+  if (!sh.isSheetHidden()) sh.hideSheet();
+  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, KEY_HEAD.length).clearContent();
+  var v = (rows || []).filter(function (r) { return r && r.length === 3 && /^[0-9a-f]{12}$/.test(String(r[2])); }).map(function (r) { return [String(r[0]), String(r[1]), String(r[2])]; });
+  if (v.length) sh.getRange(2, 1, v.length, KEY_HEAD.length).setNumberFormat('@').setValues(v);
+  return v.length;
+}
+function whoCalls(d) {
+  var k = phoneHash(d.tel), sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('번호 대조');
+  if (!k || !sh || sh.getLastRow() < 2) return '';
+  var i = letterInfo(d.c, d.uid), uid = String(i.uid || d.uid || ''), sid = String(i.sid || d.sid || '');
+  var hit = { self: false, cust: false, owner: false, otherOwner: false };
+  sh.getRange(2, 1, sh.getLastRow() - 1, 3).getValues().forEach(function (r) {
+    if (String(r[2]) !== k) return;
+    if (r[0] === 'cust') { if (String(r[1]) === uid) hit.self = true; else hit.cust = true; }
+    if (r[0] === 'owner') { if (String(r[1]) === sid) hit.owner = true; else hit.otherOwner = true; }
+  });
+  if (hit.owner) return '이 매장 사장님 · 직원 번호와 같음';
+  if (hit.self) return '편지 신청 손님 본인 번호 (사장님 아님)';
+  if (hit.cust) return '다른 편지 신청 손님 번호 (사장님 아님)';
+  if (hit.otherOwner) return '다른 매장 사장님 · 직원 번호 (이 매장 아님)';
+  return '등록된 번호 없음 (사장님 확인 필요)';
 }
 
 // 도착 · 리마인드 알림톡 버튼에 넣을 내 편지 링크(M열 + 메시지별 UTM). 어느 알림톡으로 열었는지 「열람」 탭에서 갈림
@@ -481,7 +511,7 @@ function letterInfo(code, uid) {
   return o;
 }
 
-function notifySlack(d, first) {
+function notifySlack(d, first, who) {
   var url = slackUrl();
   if (!url) return '';
   var i = letterInfo(d.c, d.uid);
@@ -495,6 +525,7 @@ function notifySlack(d, first) {
     '',
     '*연락처: ' + (tel || '-') + '*',
     '*통화 희망: ' + (d.time || '-') + '*',
+    who ? '*번호 확인: ' + who + '*' : null,
     '매장: ' + store + ' (' + (i.sid || d.sid || '-') + ')',
     '',
     '편지 전한 손님: ' + (i.nick || d.nick || '-'),
@@ -721,8 +752,10 @@ function printOps(d) {
   if (!token || d.token !== token) return { ok: false, reason: 'token' };
   var L = ss.getSheetByName('편지');
   var n = L.getLastRow() - 1;
+  if (d.type === 'phone_keys_put') return { ok: true, written: putPhoneKeys(d.rows) };
   if (n < 1) return { ok: true, rows: [], round: 1 };
   var lv = L.getRange(2, 1, n, LETTER_HEAD.length).getValues();
+  if (d.type === 'letter_ids') return { ok: true, rows: lv.filter(function (r) { return r[0]; }).map(function (r) { return [String(r[0]), String(r[15]), String(r[3])]; }) };   // 편지코드 · 회원ID · 매장ID(번호 대조 키 만들기용 · 2026-11-10)
   if (d.type === 'print_mark') {
     var want = {}; (d.codes || []).forEach(function (c) { want[c] = true; });
     var today = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd'), cnt = 0;

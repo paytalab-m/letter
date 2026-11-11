@@ -383,7 +383,7 @@ function addLetter(d) {
   var r = sh.getLastRow() + 1, J = 'J' + r;
   sh.getRange(r, 1, 1, LETTER_HEAD.length).setValues([[
     txt(d.vid), at(d.ts), txt(d.t), txt(d.sid), txt(d.store), txt(d.nick), '', '', '',
-    '=IF(B' + r + '="","",INT(B' + r + ')+N(\'마감 관리\'!$B$21))',   // 손님 전달 기한: 신청일 + 마감 관리 B21일(2026-10-26 21일 → 2026-11-11 3회차부터 10일. 1 · 2회차 458통은 =INT(B)+21로 고정)
+    '=IF(B' + r + '="","",INT(B' + r + ')+N(\'마감 관리\'!$B$21))',   // 손님 전달 기한: 신청일 + 마감 관리 B21일(2026-10-26 21일 → 2026-11-11 3회차부터 14일 = 인쇄 · 발송 2일 + 도착 5일 + 매장 전달 7일. 1 · 2회차 458통은 =INT(B)+21로 고정)
     '=IF(' + J + '="","",' + J + '+N(\'마감 관리\'!$B$22))',        // 사장님 문의 기한: 전달 기한 + 7일(마감 관리 B22)
     '',
     '=IF(P' + r + '="","","' + MYLETTER_URL + '?uid="&ENCODEURL(P' + r + ')&"&store="&ENCODEURL(E' + r + ')&"&nick="&ENCODEURL(F' + r + ')&IF(' + J + '="","","&due="&TEXT(' + J + ',"yyyy-mm-dd"))&IF(G' + r + '="","","&sent="&TEXT(G' + r + ',"yyyy-mm-dd")))',

@@ -1046,7 +1046,10 @@ function deliveredStores() {
   D.getRange(2, 1, D.getLastRow() - 1, 7).getValues().forEach(function (r) {
     var sid = String(r[3] || ''), name = String(r[4] || ''), key = sid || normName(name);
     if (!key) return;
-    var o = out[key] = out[key] || { sid: sid, name: name, hand: [], qr: null };
+    var o = out[key] = out[key] || { sid: sid, name: name, hand: [], qr: null, uids: {} };
+    var uid = String(r[2] || '');
+    if (uid && o.uids[uid]) return;   // 같은 손님이 버튼을 두 번 누른 기록은 한 번만(2026-11-11 · 랜딩 문의 댓글에 같은 닉네임이 두 번 나오던 것)
+    if (uid) o.uids[uid] = true;
     o.hand.push({ nick: String(r[5] || '') || '패써', day: r[6] || r[0], at: r[0] });
   });
   var Q = ss.getSheetByName('QR 접속');

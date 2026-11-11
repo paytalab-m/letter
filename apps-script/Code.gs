@@ -93,7 +93,7 @@ function doGet(e) {
 function doPost(e) {
   var d = JSON.parse(e.postData.contents);
   if (d.type === 'addr_fix') return ContentService.createTextOutput(JSON.stringify(addrFix(d))).setMimeType(ContentService.MimeType.JSON);
-  if (d.type === 'print_list' || d.type === 'print_mark' || d.type === 'sent_mark' || d.type === 'letter_ids' || d.type === 'phone_keys_put' || d.type === 'letter_text_put' || d.type === 'inq_slack_test') return ContentService.createTextOutput(JSON.stringify(printOps(d))).setMimeType(ContentService.MimeType.JSON);
+  if (d.type === 'print_list' || d.type === 'print_mark' || d.type === 'sent_mark' || d.type === 'letter_ids' || d.type === 'landing_list' || d.type === 'phone_keys_put' || d.type === 'letter_text_put' || d.type === 'inq_slack_test') return ContentService.createTextOutput(JSON.stringify(printOps(d))).setMimeType(ContentService.MimeType.JSON);
   if (d.type === 'send_list') return ContentService.createTextOutput(JSON.stringify(sendList(d))).setMimeType(ContentService.MimeType.JSON);
   if (d.type === 'apply_slack_test') {   // 신청 알림 시험(비밀번호 = 「설정」 B2). 시트에는 아무것도 적지 않음
     var ok = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
@@ -820,6 +820,8 @@ function printOps(d) {
   var L = ss.getSheetByName('편지');
   var n = L.getLastRow() - 1;
   if (d.type === 'phone_keys_put') return { ok: true, written: putPhoneKeys(d.rows) };
+  if (d.type === 'landing_list') { var LL = ss.getSheetByName('랜딩 문의 기록');   // 모집 명단에서 뺄 랜딩 문의 매장(fill_list.py · 2026-11-11)
+    return { ok: true, rows: LL && LL.getLastRow() > 1 ? LL.getRange(2, 1, LL.getLastRow() - 1, 3).getValues().map(function (r) { return [r[0] instanceof Date ? r[0].toISOString() : String(r[0]), String(r[1]), String(r[2])]; }) : [] }; }
   if (d.type === 'letter_text_put') return { ok: true, written: putLetterTexts(d.rows) };
   if (d.type === 'inq_slack_test') return { ok: true, slack: notifySlack({ type: 'inquiry', test: true, c: d.c, store: '테스트 매장', tel: '01000000000', time: '시험 발송', nick: '' }, 'Y', '시험 · 번호 확인 줄이 여기에 나옴') };   // 시트에 적지 않음
   if (n < 1) return { ok: true, rows: [], round: 1 };
@@ -1013,6 +1015,8 @@ function installTrackTrigger() {   // 편집기에서 한 번만 실행
 var LANDING_CH = 'CQVFJRHM4';
 var LANDING_TAG = '<@U03UESU9QCV> <@UC4QUTTR7> <@U01BY0S45SN>';   // 정중호 · 강기성 · 황봄이(서울영업팀)
 var MATCH_HEAD = ['확인 시각', '문의 시각', '문의 매장', '짝 맞춘 방법', '우리 매장', '댓글', '보냄'];
+// 숨김 탭 「랜딩 문의 기록」: 모든 랜딩 문의(문의 시각 · 매장명 · 연락처 키 = SHA-256 앞 12자). 모집 명단을 만들 때 이 매장들은 뺌(사용자 결정 2026-11-11). 번호 원본은 적지 않음
+var LANDING_LOG_HEAD = ['문의 시각', '문의 매장', '연락처 키', '슬랙 ts'];
 
 function normName(s) { return String(s || '').replace(/[^0-9A-Za-z가-힣]/g, '').toLowerCase(); }
 function normAddr(s) { return String(s || '').replace(/\([^)]*\)/g, '').toLowerCase().replace(/[^0-9a-z가-힣]/g, ''); }   // 주소 완전 일치 비교용(Snowflake 쪽과 같은 규칙)
@@ -1130,6 +1134,9 @@ function landingWatch() {
   msgs.forEach(function (m) {
     var q = parseLanding(m.text);
     if (!q) return;
+    var LL = sheet('랜딩 문의 기록', LANDING_LOG_HEAD);
+    if (!LL.isSheetHidden()) LL.hideSheet();
+    LL.appendRow([new Date(Number(m.ts) * 1000), q.name, "'" + phoneHash(q.phone), "'" + m.ts]);
     var mt = matchDelivered(q.name, q.phone, stores, q.region);
     if (!mt) return;
     var text = landingComment(mt.store), sent = '';

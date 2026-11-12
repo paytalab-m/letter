@@ -44,6 +44,7 @@ var APPLY_CLOSED = new Date() >= APPLY_CLOSE_AT;   // 요청마다 다시 계산
 var APPLY_GRP_COL = 32;               // 「신청」 AF열 「시험」
 var LETTER_HEAD = ['신청번호', '신청시각', '열쇠', '매장ID', '매장', '닉네임', '발송일', '운송장번호', '도착일', '전달 기한', '문의 기한', '리마인드 발송일', '내 편지 링크', '점주 QR 링크', '메모', '회원ID', '시험', '편지 종류', 'QR 여부', '인쇄 회차', '인쇄일', '도착 알림 링크', '리마인드 링크', '도착 알림 발송일'];
 var PRINT_ROUND_COL = 20, PRINT_DATE_COL = 21; // 「편지」 T · U열
+var CLOSED_DB_ID = '1s3S_jX01KEKfbqD_AOG9SkcaIjLniuqdvJaPLiN2kyM';   // 네이버 플레이스 기반 신규 매장 데이터(폐업 매장 DB 탭) · 2026-11-12
 var GUIDE_COL = 26;   // 「편지」 Z열 「안내지 QR 주소」(손님 안내지 QR = 그 손님의 「내 편지」 짧은 주소)
 var SCAN_HEAD = ['접속시각', '편지코드', '열쇠', '매장ID', '매장', '손님 전달 기록 있음', '기기', '열린 앱', '유입 URL', '브라우저 번호', '기기 특징', '신청자 판정'];
 var INQ_HEAD = ['접수시각', '편지코드', '열쇠', '매장ID', '매장', '손님 닉네임', '전화번호', '통화 시간대', '매장 첫 문의', '기기', '유입 URL', '처리상태', '첫 통화일', '결과', '성공쿠폰 지급일', '메모', '다시 보냄', '슬랙 알림', '브라우저 번호', '기기 특징', '신청자 판정'];
@@ -93,7 +94,7 @@ function doGet(e) {
 function doPost(e) {
   var d = JSON.parse(e.postData.contents);
   if (d.type === 'addr_fix') return ContentService.createTextOutput(JSON.stringify(addrFix(d))).setMimeType(ContentService.MimeType.JSON);
-  if (d.type === 'print_list' || d.type === 'print_mark' || d.type === 'sent_mark' || d.type === 'letter_ids' || d.type === 'landing_list' || d.type === 'phone_keys_put' || d.type === 'letter_text_put' || d.type === 'inq_slack_test') return ContentService.createTextOutput(JSON.stringify(printOps(d))).setMimeType(ContentService.MimeType.JSON);
+  if (d.type === 'print_list' || d.type === 'print_mark' || d.type === 'sent_mark' || d.type === 'letter_ids' || d.type === 'landing_list' || d.type === 'phone_keys_put' || d.type === 'letter_text_put' || d.type === 'inq_slack_test' || d.type === 'closed_list') return ContentService.createTextOutput(JSON.stringify(printOps(d))).setMimeType(ContentService.MimeType.JSON);
   if (d.type === 'send_list') return ContentService.createTextOutput(JSON.stringify(sendList(d))).setMimeType(ContentService.MimeType.JSON);
   if (d.type === 'apply_slack_test') {   // 신청 알림 시험(비밀번호 = 「설정」 B2). 시트에는 아무것도 적지 않음
     var ok = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
@@ -824,6 +825,13 @@ function printOps(d) {
   if (d.type === 'phone_keys_put') return { ok: true, written: putPhoneKeys(d.rows) };
   if (d.type === 'landing_list') { var LL = ss.getSheetByName('랜딩 문의 기록');   // 모집 명단에서 뺄 랜딩 문의 매장(fill_list.py · 2026-11-11)
     return { ok: true, rows: LL && LL.getLastRow() > 1 ? LL.getRange(2, 1, LL.getLastRow() - 1, 3).getValues().map(function (r) { return [r[0] instanceof Date ? r[0].toISOString() : String(r[0]), String(r[1]), String(r[2])]; }) : [] }; }
+  if (d.type === 'closed_list') {   // 「네이버 플레이스 기반 신규 매장 데이터」 폐업 매장 DB → 모집 · 인쇄 전 폐업 매장 제외(2026-11-12)
+    var CS = SpreadsheetApp.openById(CLOSED_DB_ID).getSheetByName('폐업 매장 DB'), cn = CS.getLastRow() - 1;
+    return { ok: true, rows: cn < 1 ? [] : CS.getRange(2, 1, cn, 18).getValues().filter(function (r) { return r[0]; }).map(function (r) {
+      var q = r[16] instanceof Date ? Utilities.formatDate(r[16], 'Asia/Seoul', 'yyyy-MM-dd') : String(r[16]);
+      return [String(r[0]), String(r[1]), String(r[5] || r[4]), String(r[3]), q, String(r[17])];   // 플레이스ID · 매장명 · 주소 · 전화 · 폐업확인일 · 고객구분
+    }) };
+  }
   if (d.type === 'letter_text_put') return { ok: true, written: putLetterTexts(d.rows) };
   if (d.type === 'inq_slack_test') return { ok: true, slack: notifySlack({ type: 'inquiry', test: true, c: d.c, store: '테스트 매장', tel: '01000000000', time: '시험 발송', nick: '' }, 'Y', '시험 · 번호 확인 줄이 여기에 나옴') };   // 시트에 적지 않음
   if (n < 1) return { ok: true, rows: [], round: 1 };

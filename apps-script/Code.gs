@@ -825,13 +825,7 @@ function printOps(d) {
   if (d.type === 'phone_keys_put') return { ok: true, written: putPhoneKeys(d.rows) };
   if (d.type === 'landing_list') { var LL = ss.getSheetByName('랜딩 문의 기록');   // 모집 명단에서 뺄 랜딩 문의 매장(fill_list.py · 2026-11-11)
     return { ok: true, rows: LL && LL.getLastRow() > 1 ? LL.getRange(2, 1, LL.getLastRow() - 1, 3).getValues().map(function (r) { return [r[0] instanceof Date ? r[0].toISOString() : String(r[0]), String(r[1]), String(r[2])]; }) : [] }; }
-  if (d.type === 'closed_list') {   // 「네이버 플레이스 기반 신규 매장 데이터」 폐업 매장 DB → 모집 · 인쇄 전 폐업 매장 제외(2026-11-12)
-    var CS = SpreadsheetApp.openById(CLOSED_DB_ID).getSheetByName('폐업 매장 DB'), cn = CS.getLastRow() - 1;
-    return { ok: true, rows: cn < 1 ? [] : CS.getRange(2, 1, cn, 18).getValues().filter(function (r) { return r[0]; }).map(function (r) {
-      var q = r[16] instanceof Date ? Utilities.formatDate(r[16], 'Asia/Seoul', 'yyyy-MM-dd') : String(r[16]);
-      return [String(r[0]), String(r[1]), String(r[5] || r[4]), String(r[3]), q, String(r[17])];   // 플레이스ID · 매장명 · 주소 · 전화 · 폐업확인일 · 고객구분
-    }) };
-  }
+  if (d.type === 'closed_list') return { ok: true, rows: closedDb() };
   if (d.type === 'letter_text_put') return { ok: true, written: putLetterTexts(d.rows) };
   if (d.type === 'inq_slack_test') return { ok: true, slack: notifySlack({ type: 'inquiry', test: true, c: d.c, store: '테스트 매장', tel: '01000000000', time: '시험 발송', nick: '' }, 'Y', '시험 · 번호 확인 줄이 여기에 나옴') };   // 시트에 적지 않음
   if (n < 1) return { ok: true, rows: [], round: 1 };
@@ -1308,3 +1302,13 @@ function dailyLetterJobRun() {
   try { var url = slackUrl('SLACK_WEBHOOK_APPLY', 'B3'); if (url && (pr.predicted || tr.checked || out.arrive.n || out.remind.n)) UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify({ text: text }), muteHttpExceptions: true }); } catch (e) {}
   return out;
 }
+
+// 「네이버 플레이스 기반 신규 매장 데이터」 폐업 매장 DB(다른 시트)를 읽기 전용으로 읽음 → 모집 · 인쇄 전 폐업 매장 제외(2026-11-12)
+// 권한: 고급 서비스 Sheets + spreadsheets.readonly(다른 시트는 읽기만 · 고치기 불가). 처음 한 번 편집기에서 authClosedDb 실행 → 허용
+function closedDb() {
+  var v = Sheets.Spreadsheets.Values.get(CLOSED_DB_ID, "'폐업 매장 DB'!A2:R", { valueRenderOption: 'FORMATTED_VALUE' }).values || [];
+  return v.filter(function (r) { return r[0]; }).map(function (r) {
+    return [String(r[0]), String(r[1] || ''), String(r[5] || r[4] || ''), String(r[3] || ''), String(r[16] || ''), String(r[17] || '')];   // 플레이스ID · 매장명 · 주소 · 전화 · 폐업확인일 · 고객구분
+  });
+}
+function authClosedDb() { Logger.log('폐업 매장 DB ' + closedDb().length + '줄 읽음'); }

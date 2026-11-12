@@ -432,10 +432,12 @@ function addInquiry(d) {
   var first = d.sid && sh.getRange('D:D').createTextFinder(String(d.sid)).matchEntireCell(true).findNext() ? 'N' : 'Y';
   var who = d.type === 'inquiry' ? whoCalls(d) : '';
   d.judge = applicantJudge(d);
-  var slack = d.type === 'inquiry' ? notifySlack(d, first, who) : '';
+  // 손님 번호(신청 손님 본인 · 다른 신청 손님)로 확인된 문의는 슬랙에 올리지 않고 시트에만 남김(2026-11-12 사용자 결정 · 영업팀 혼선 방지)
+  var custOnly = /^(편지 신청 손님 본인|다른 편지 신청 손님)/.test(who);
+  var slack = d.type !== 'inquiry' ? '' : custOnly ? '안 보냄(손님 번호)' : notifySlack(d, first, who);
   sh.getRange(sh.getLastRow() + 1, 1, 1, INQ_HEAD.length).setValues([[
     at(d.ts), txt(d.c), txt(d.t), txt(d.sid), txt(d.store), txt(d.nick), txt(d.tel), txt(d.time), first,
-    txt(d.device), txt(d.ref), d.type === 'contact_click' ? 'biz 이동' : '접수', '', '', '', who ? '번호 확인: ' + who : '', d.edit ? 'Y' : '', slack, txt(d.bid), txt(d.sig), d.judge
+    txt(d.device), txt(d.ref), d.type === 'contact_click' ? 'biz 이동' : custOnly ? '손님 문의(제외)' : '접수', '', '', '', who ? '번호 확인: ' + who : '', d.edit ? 'Y' : '', slack, txt(d.bid), txt(d.sig), d.judge
   ]]);
 }
 

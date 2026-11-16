@@ -306,7 +306,8 @@ function markCol(p, col) {
 
 // 「내 편지」를 열 때마다 한 줄. 도착 알림톡 · 리마인드 뒤 실제로 열어 봤는지(진단 지표) 보는 용도
 // 손님이 안내지 QR로 「내 편지」에 처음 들어옴 = 편지가 실제로 도착함(2026-10-29).
-// 그 손님 · 매장의 편지 중 도착일(I)이 빈 것에 오늘을 도착일로, 도착 알림 발송일(X)도 오늘로 적어 도착 알림톡은 건너뜀(리마인드는 X 기준으로 그대로 감)
+// 그 손님 · 매장의 편지 중 도착일(I)이 빈 것에 오늘을 도착일로 적음 → 「도착 알림 대상」에 올라 다음 자동 발송(13시 · 19시)에 도착 알림톡이 나감.
+// 안내지 QR · 「내 편지」 열람 여부와 관계없이 도착 알림톡 · 리마인드는 그대로 보냄(2026-11-16 사용자 결정. 전에는 X도 오늘로 적어 도착 알림톡을 건너뜀)
 function guideArrival(d) {
   var L = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('편지');
   if (!L || L.getLastRow() < 2 || !d.uid) return;
@@ -315,7 +316,6 @@ function guideArrival(d) {
     if (String(r[15]) !== String(d.uid) || r[8]) return;               // P 회원ID · I 도착일
     if (d.store && String(r[4]) && String(r[4]) !== String(d.store)) return;   // E 매장(여러 매장 편지면 그 매장만)
     L.getRange(i + 2, 9).setValue(now);
-    if (!r[23]) L.getRange(i + 2, 24).setValue(now);
     L.getRange(i + 2, TRACK_COL).setValue('안내지 QR로 도착 확인 · ' + Utilities.formatDate(now, 'Asia/Seoul', 'M/d HH:mm'));
   });
 }

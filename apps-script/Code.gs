@@ -94,7 +94,7 @@ function doGet(e) {
 function doPost(e) {
   var d = JSON.parse(e.postData.contents);
   if (d.type === 'addr_fix') return ContentService.createTextOutput(JSON.stringify(addrFix(d))).setMimeType(ContentService.MimeType.JSON);
-  if (d.type === 'print_list' || d.type === 'print_mark' || d.type === 'sent_mark' || d.type === 'letter_ids' || d.type === 'landing_list' || d.type === 'phone_keys_put' || d.type === 'letter_text_put' || d.type === 'inq_slack_test' || d.type === 'closed_list') return ContentService.createTextOutput(JSON.stringify(printOps(d))).setMimeType(ContentService.MimeType.JSON);
+  if (d.type === 'print_list' || d.type === 'print_mark' || d.type === 'sent_mark' || d.type === 'letter_ids' || d.type === 'landing_list' || d.type === 'phone_keys_put' || d.type === 'letter_text_put' || d.type === 'inq_slack_test' || d.type === 'closed_list' || d.type === 'store_hist_put' || d.type === 'store_hist_test') return ContentService.createTextOutput(JSON.stringify(printOps(d))).setMimeType(ContentService.MimeType.JSON);
   if (d.type === 'send_list') return ContentService.createTextOutput(JSON.stringify(sendList(d))).setMimeType(ContentService.MimeType.JSON);
   if (d.type === 'apply_slack_test') {   // 신청 알림 시험(비밀번호 = 「설정」 B2). 시트에는 아무것도 적지 않음
     var ok = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
@@ -486,6 +486,40 @@ function putPhoneKeys(rows) {
   if (v.length) sh.getRange(2, 1, v.length, KEY_HEAD.length).setNumberFormat('@').setValues(v);
   return v.length;
 }
+// ── 매장 이력(2026-11-16 · 매머드커피 말바우시장점: 11/2 계약 완료 매장에 11/6 편지가 가서, 사장님 QR 문의에 영업팀이 다시 연락하려 함) ──
+// 숨김 탭 「매장 이력」: 매장ID · 이력(선정 뒤 계약 · 거절 · 해지 · 정식 매장 연결, 날짜 포함). 인쇄 도구 phone_keys.py(store_history.py)가 Snowflake로 만들어 store_hist_put으로 넣음
+// 랜딩 문의는 여기서 바로 봄: 「랜딩 문의 기록」의 매장 이름이 같거나(기호 빼고 · 짧은 쪽이 6자 이상 「…점」이면 포함도) 연락처 키가 이 매장 점주 쪽 번호 키와 같음
+var HIST_HEAD = ['매장ID', '이력'];
+function putStoreHist(rows) {
+  var sh = sheet('매장 이력', HIST_HEAD);
+  if (!sh.isSheetHidden()) sh.hideSheet();
+  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, HIST_HEAD.length).clearContent();
+  var v = (rows || []).filter(function (r) { return r && r.length === 2 && r[0] && r[1]; }).map(function (r) { return [String(r[0]), String(r[1])]; });
+  if (v.length) sh.getRange(2, 1, v.length, HIST_HEAD.length).setNumberFormat('@').setValues(v);
+  return v.length;
+}
+function storeHist(sid, store) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), out = [];
+  var H = ss.getSheetByName('매장 이력');
+  if (H && sid && H.getLastRow() > 1) {
+    var hit = H.getRange('A:A').createTextFinder(String(sid)).matchEntireCell(true).findNext();
+    if (hit && hit.getRow() > 1) out.push(String(H.getRange(hit.getRow(), 2).getValue()));
+  }
+  var LL = ss.getSheetByName('랜딩 문의 기록');
+  if (LL && LL.getLastRow() > 1 && !/랜딩/.test(out.join(''))) {   // 「매장 이력」에 이미 랜딩 문의가 있으면 다시 안 붙임
+    var keys = {}, K = ss.getSheetByName('번호 대조'), n = normName(store), days = [];
+    if (K && sid && K.getLastRow() > 1) K.getRange(2, 1, K.getLastRow() - 1, 3).getValues().forEach(function (r) { if (r[0] === 'owner' && String(r[1]) === String(sid)) keys[String(r[2])] = true; });
+    LL.getRange(2, 1, LL.getLastRow() - 1, 3).getValues().forEach(function (r) {
+      var m = normName(r[1]), s = m.length < n.length ? m : n, l = m.length < n.length ? n : m;
+      var byName = !!n && !!m && (m === n || (s.length >= 6 && /점$/.test(s) && l.indexOf(s) >= 0));
+      var day = r[0] instanceof Date ? md(r[0]) : String(r[0]).slice(5, 10);
+      if ((byName || keys[String(r[2])]) && days.indexOf(day) < 0) days.push(day);
+    });
+    if (days.length) out.push(days.join(' · ') + ' 랜딩 입점 문의');
+  }
+  return out.filter(String).join(' / ');
+}
+
 function whoCalls(d) {
   var k = phoneHash(d.tel), sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('번호 대조');
   if (!k || !sh || sh.getLastRow() < 2) return '';
@@ -575,6 +609,8 @@ function notifySlack(d, first, who) {
   var tel = String(d.tel || '').replace(/\D/g, '').replace(/^(\d{3})(\d{3,4})(\d{4})$/, '$1-$2-$3');
   var exp = [GRP_LABEL[i.grp] || i.grp, i.letter, i.qr].filter(String).join(', ') || '-';
   var store = d.store || '-';
+  var hist = '';
+  try { hist = storeHist(i.sid || d.sid, d.store); } catch (e) {}
   // 슬랙 알림: 전화하는 사람이 볼 순서(누구에게 · 언제 → 통화 때 말할 내용 → 분석용 참고). 이모지 없이 「항목: 값」 한 줄에 하나,
   // 묶음 사이는 빈 줄, 연락처 · 통화 희망만 굵게. 날짜는 「10월 23일」로 통일
   var lines = [
@@ -582,6 +618,7 @@ function notifySlack(d, first, who) {
     '',
     '*연락처: ' + (tel || '-') + '*',
     '*통화 희망: ' + (d.time || '-') + '*',
+    hist ? '*매장 이력: ' + hist + ' → 이미 영업 진행 중일 수 있음. 담당 영업 확인 뒤 연락*' : null,
     who ? '*번호 확인: ' + who + '*' : null,
     d.judge ? '브라우저 확인: ' + d.judge : null,
     '매장: ' + store + ' (' + (i.sid || d.sid || '-') + ')',
@@ -823,6 +860,8 @@ function printOps(d) {
   var L = ss.getSheetByName('편지');
   var n = L.getLastRow() - 1;
   if (d.type === 'phone_keys_put') return { ok: true, written: putPhoneKeys(d.rows) };
+  if (d.type === 'store_hist_put') return { ok: true, written: putStoreHist(d.rows) };   // 매장 이력(phone_keys.py · 2026-11-16)
+  if (d.type === 'store_hist_test') return { ok: true, hist: storeHist(d.sid, d.store) };   // 슬랙 「매장 이력」 줄 미리 보기(시트 · 슬랙에 안 씀)
   if (d.type === 'landing_list') { var LL = ss.getSheetByName('랜딩 문의 기록');   // 모집 명단에서 뺄 랜딩 문의 매장(fill_list.py · 2026-11-11)
     return { ok: true, rows: LL && LL.getLastRow() > 1 ? LL.getRange(2, 1, LL.getLastRow() - 1, 3).getValues().map(function (r) { return [r[0] instanceof Date ? r[0].toISOString() : String(r[0]), String(r[1]), String(r[2])]; }) : [] }; }
   if (d.type === 'closed_list') return { ok: true, rows: closedDb() };

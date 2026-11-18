@@ -1257,9 +1257,26 @@ function staffIds() {
   return staff;
 }
 
+// 알림톡(도착 · 리마인드)을 보내지 않을 편지코드: 반송 · 폐업 등 손님이 편지를 전할 수 없는 편지(2026-11-18 사용자 결정 · @99)
+// 새로 생기면 여기에 더하거나, 배포 없이 「설정」 B27에 쉼표로 적음
+var NO_MSG_CODES = {
+  LMVRWB4WU8XK: '반송 1-11-10 빽다방 춘천강북점',
+  LMVRV99DBAMA: '반송 1-02-08 메가MGC커피 세종해밀점',
+  LMVRWAFI7YK3: '반송 1-22-10 볕내',
+  LMVRUYK6WVXT: '폐업 제보 1-11-14 요거프레소 평택팽성점'
+};
+function noMsgCodes() {
+  var s = {};
+  Object.keys(NO_MSG_CODES).forEach(function (c) { s[c] = true; });
+  setting('B27').split(/[\s,]+/).forEach(function (c) { if (c) s[c] = true; });
+  return s;
+}
+
 function eligible(kind, rows) {
   var m = MSG[kind], L = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('편지');
   if (!L || L.getLastRow() < 2) return [];
+  var block = noMsgCodes();
+  rows = rows.filter(function (r) { return !block[String(r[6])]; });
   var sent = {}, done = {}, props = PropertiesService.getScriptProperties().getProperties(), seen = {}, staff = staffIds();
   L.getRange(2, 1, L.getLastRow() - 1, 24).getValues().forEach(function (r) {
     var u = String(r[15]);

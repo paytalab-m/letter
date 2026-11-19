@@ -188,7 +188,8 @@ function doPost(e) {
       if (!q) return;
       sc.parsed++; if (phoneHash(q.phone)) sc.phone++;
       if (sc.names.length < 5) sc.names.push(q.name);
-      if (matchDelivered(q.name, q.phone, sto, q.region)) sc.matched++;
+      var mq = matchDelivered(q.name, q.phone, sto, q.region);
+      if (mq && mq.sure) sc.matched++; else if (mq) sc.check = (sc.check || 0) + 1;
     });
     sc.ok = hs.ok; sc.error = hs.error; sc.delivered_stores = Object.keys(sto).length;
     return ContentService.createTextOutput(JSON.stringify(sc)).setMimeType(ContentService.MimeType.JSON);
@@ -199,7 +200,7 @@ function doPost(e) {
     var st = deliveredStores(), mt = matchDelivered(d.name, d.phone, st, d.region);
     var one = { name: '견본매장', hand: [{ nick: '라떼좋아', day: '2026-11-14', at: '2026-11-14' }], qr: new Date('2026-11-15T10:00:00+09:00') };
     var two = { name: '견본매장', hand: [{ nick: '라떼좋아', day: '2026-11-14', at: '2026-11-14' }, { nick: '아침한잔', day: '2026-11-16', at: '2026-11-16' }], qr: null };
-    return ContentService.createTextOutput(JSON.stringify({ ok: true, delivered_stores: Object.keys(st).length, match: mt ? { how: mt.how, store: mt.store.name } : null,
+    return ContentService.createTextOutput(JSON.stringify({ ok: true, delivered_stores: Object.keys(st).length, match: mt ? { how: mt.how, store: mt.store.name, score: mt.score, sure: mt.sure } : null,
       sample_one: landingComment(one), sample_two: landingComment(two) })).setMimeType(ContentService.MimeType.JSON);
   }
   if (d.type === 'track_test' || d.type === 'track_run') {   // 우체국 배달 조회 시험(rgist 한 건, 시트에 안 씀) · 지금 한 번 돌리기. 비밀번호 = 「설정」 B2
@@ -1048,7 +1049,7 @@ function trackArrivals() {
 function installTrackTrigger() {   // 편집기에서 한 번만 실행
   ScriptApp.getProjectTriggers().forEach(function (t) { if (/^(trackArrivals|dailyLetterJob|landingWatch)$/.test(t.getHandlerFunction())) ScriptApp.deleteTrigger(t); });
   [13, 19].forEach(function (h) { ScriptApp.newTrigger('dailyLetterJob').timeBased().everyDays(1).atHour(h).inTimezone('Asia/Seoul').create(); });
-  ScriptApp.newTrigger('landingWatch').timeBased().everyMinutes(5).create();   // #00랜딩문의알림 새 문의 확인(2026-10-29)
+  ScriptApp.newTrigger('landingWatch').timeBased().everyMinutes(1).create();   // #00랜딩문의알림 새 문의 확인(2026-10-29 · 2026-11-19 5분 → 1분)
 }
 
 // ── #00랜딩문의알림 → 편지 건넨 매장이면 댓글(2026-10-29) ─────────────────────
@@ -1120,24 +1121,67 @@ function addrKey(s) {
 
 // 문의 매장 이름 · 연락처 · 지역 → 편지 건넨 매장 { store, how } 또는 null
 // 지난 문의 250건으로 잰 결과(2026-10-29): 연락처가 문의 전에 DB에 있던 건 22%, 이름은 맞는 매장을 80% 찾음, 주소는 도로명이 적힌 47%에서 보조
+// 2026-11-19 점수제로 바꿈: 매장마다 점수를 매겨 가장 높은 매장을 고름. 70점 이상이고 같은 점수 다른 매장이 없을 때만 sure(댓글),
+// 60~69점이거나 동점 매장이 있으면 sure=false(「랜딩문의 매칭」 탭에만 「확인 필요」로 적고 댓글 안 함)
+// 브랜드 사전: 표기가 달라도 같은 브랜드로 묶고, 둘 다 브랜드가 잡혔는데 서로 다르면 이름으로는 짝 맞추지 않음
+var BRANDS = [
+  ['메가', ['메가mgc커피', 'mgc메가커피', '메가엠지씨커피', '메가커피', '메가mgc']], ['컴포즈', ['컴포즈커피', '컴포즈']],
+  ['빽다방', ['빽다방', '백다방']], ['이디야', ['이디야커피', 'ediyacoffee', 'ediya', '이디야']], ['스타벅스', ['스타벅스', 'starbucks']],
+  ['투썸', ['투썸플레이스', 'atwosomeplace', 'twosomeplace', '투썸']], ['할리스', ['할리스커피', 'hollys', '할리스']],
+  ['매머드', ['매머드익스프레스', '매머드커피', '매머드']], ['더벤티', ['더벤티', 'theventi', '벤티']], ['커피에반하다', ['커피에반하다']],
+  ['감성커피', ['감성커피']], ['하삼동', ['하삼동커피', '하삼동']], ['텐퍼센트', ['텐퍼센트커피', '10퍼센트커피', '텐퍼센트']],
+  ['우지커피', ['우지커피']], ['공차', ['공차', 'gongcha']], ['엔제리너스', ['엔제리너스', 'angelinus']], ['카페봄봄', ['카페봄봄']],
+  ['요거프레소', ['요거프레소']], ['해쉬커피', ['해쉬커피']], ['하이오커피', ['하이오커피']], ['백억커피', ['백억커피']],
+  ['커피빈', ['커피빈', 'coffeebean']], ['폴바셋', ['폴바셋', 'paulbassett']], ['탐앤탐스', ['탐앤탐스', 'tomntoms']], ['파스쿠찌', ['파스쿠찌', 'pascucci']],
+  ['바나프레소', ['바나프레소']], ['더리터', ['더리터']], ['쥬씨', ['쥬씨']], ['카페일리터', ['카페일리터']], ['천씨씨커피', ['천씨씨커피']],
+  ['슈퍼사이즈커피', ['슈퍼사이즈커피']], ['팔공티', ['팔공티']], ['와플대학', ['와플대학']], ['커피나무', ['커피나무']], ['달콤커피', ['달콤커피']]
+];
+function nameParts(s) {   // 「메가 MGC 커피 부평점」 → { brand: '메가', br: '부평' } · 브랜드 못 잡으면 brand '' · br = 커피 · 카페 낱말과 끝 「점」 뺀 나머지
+  var n = normName(s), brand = '', rest = n;
+  for (var i = 0; i < BRANDS.length && !brand; i++) for (var j = 0; j < BRANDS[i][1].length; j++) {
+    var v = BRANDS[i][1][j], at = n.indexOf(v);
+    if (at >= 0 && at <= 2) { brand = BRANDS[i][0]; rest = n.slice(0, at) + n.slice(at + v.length); break; }
+  }
+  var br = rest.replace(/(커피|카페|cafe|coffee)/g, '').replace(/점$/, '');
+  return { n: n, brand: brand, br: br };
+}
 function matchDelivered(name, phone, stores, region) {
-  var h = phoneHash(phone), byHash = {}, ak = addrKey(region);
+  var h = phoneHash(phone), byHash = {}, ak = addrKey(region), rn = normName(region);
   var P = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('편지 매장 번호');
   if (h && P && P.getLastRow() > 1) P.getRange(2, 1, P.getLastRow() - 1, 2).getValues().forEach(function (r) { if (String(r[1]) === h) byHash[String(r[0])] = true; });
-  var n = normName(name), best = null;
+  var q = nameParts(name), n = q.n, cands = [];
   Object.keys(stores).forEach(function (k) {
-    var s = stores[k], m = normName(s.name);
-    if (byHash[s.sid] || (h && s.tels && s.tels[h])) best = { store: s, how: '연락처' };
-    // 이름: 같거나, 짧은 쪽이 지점명까지(「…점」으로 끝남) 있고 긴 쪽에 들어 있을 때만. 「메가MGC커피」처럼 브랜드만 적은 문의가 다른 지점과 붙지 않게
-    var sh = n.length <= m.length ? n : m, lo = sh === n ? m : n;
-    if (!best && n && m && (n === m || (sh.length >= 6 && /점$/.test(sh) && lo.indexOf(sh) >= 0))) best = { store: s, how: '매장 이름' };
-    // 비슷한 이름(오타 · 한두 글자 차이): 앞 2글자(브랜드)가 같고 두 글자씩 묶어 비교한 겹침이 0.8 이상, 둘 다 6자 이상
-    else if (!best && n.length >= 6 && m.length >= 6 && n.slice(0, 2) === m.slice(0, 2) && dice(n, m) >= 0.8) best = { store: s, how: '비슷한 매장 이름' };
-    // 브랜드를 줄여 씀(메가커피 ↔ 메가MGC커피): 앞 2글자가 같고 끝의 지점명이 5글자 이상(「…점」 포함) 똑같을 때
-    else if (!best && n.slice(0, 2) === m.slice(0, 2) && /점$/.test(n) && sameTail(n, m) >= 5) best = { store: s, how: '지점명' };
-    // 주소: 문의 「지역」의 도로명 + 건물번호가 매장 주소와 같을 때(이름이 달라도)
-    else if (!best && ak && s.ak && ak === s.ak) best = { store: s, how: '주소' };
+    var s = stores[k], p = nameParts(s.name), m = p.n, sc = 0, how = '';
+    var put = function (v, w) { if (v > sc) { sc = v; how = w; } };
+    if (byHash[s.sid] || (h && s.tels && s.tels[h])) put(100, '연락처');
+    if (ak && s.ak && ak === s.ak) put(80, '주소');
+    var brandClash = q.brand && p.brand && q.brand !== p.brand;   // 다른 브랜드끼리는 이름 비교 안 함
+    if (!brandClash && n && m) {
+      var sh = n.length <= m.length ? n : m, lo = sh === n ? m : n;
+      if (n === m) put(95, '매장 이름');
+      if (q.brand && q.brand === p.brand && q.br && q.br === p.br && q.br.length >= 2) put(90, '매장 이름(브랜드 표기 다름)');
+      if (sh.length >= 6 && /점$/.test(sh) && lo.indexOf(sh) >= 0) put(85, '매장 이름');
+      if (q.brand && q.brand === p.brand && q.br && p.br) {
+        var bs = q.br.length <= p.br.length ? q.br : p.br, bl = bs === q.br ? p.br : q.br;
+        if (bs.length >= 4 && bl.indexOf(bs) >= 0) put(80, '지점명');   // 부평동아2단지 ⊂ 인천부평동아2단지
+        else if (bs.length >= 3 && bl.indexOf(bs) >= 0) put(65, '지점명(확인 필요)');
+        if (bs.length >= 3 && dice(q.br, p.br) >= 0.8) put(75, '비슷한 지점명');
+        else if (bs.length >= 3 && dice(q.br, p.br) >= 0.6) put(60, '비슷한 지점명(확인 필요)');
+      }
+      if (n.length >= 6 && m.length >= 6 && n.slice(0, 2) === m.slice(0, 2) && dice(n, m) >= 0.8) put(75, '비슷한 매장 이름');
+      if (n.slice(0, 2) === m.slice(0, 2) && /점$/.test(n) && sameTail(n, m) >= 5) put(75, '지점명');
+      if (!q.brand && !p.brand && q.br.length >= 3 && p.br.length >= 3 && dice(q.br, p.br) >= 0.7) put(60, '비슷한 매장 이름(확인 필요)');
+    }
+    // 문의 「지역」에 매장 도로명이 들어 있으면 이름 점수에 +5(주소 · 연락처로 잡힌 건 그대로)
+    var road = s.ak ? String(s.ak).replace(/[0-9].*$/, '') : '';
+    if (sc >= 60 && sc < 100 && road.length >= 2 && rn.indexOf(road) >= 0) sc += 5;
+    if (sc >= 60) cands.push({ store: s, how: how, score: sc });
   });
+  if (!cands.length) return null;
+  cands.sort(function (a, b) { return b.score - a.score; });
+  var best = cands[0], tie = cands.length > 1 && cands[1].score === best.score && cands[1].store !== best.store && best.score < 100;
+  best.sure = best.score >= 70 && !tie;
+  if (tie) best.how += ' · 같은 점수 매장 ' + cands.filter(function (c) { return c.score === best.score; }).length + '곳';
   return best;
 }
 
@@ -1170,6 +1214,21 @@ function parseLanding(text) {
 
 function landingWatch() {
   if (!setting('B7')) return { ok: false, err: '봇 토큰 없음(설정 B7)' };
+  // 1분마다 돌므로 앞 실행이 안 끝났으면 건너뜀(같은 문의에 댓글 두 번 방지). 스크립트 잠금은 신청 저장이 쓰므로 문서 잠금을 따로 씀
+  var lk = LockService.getDocumentLock();
+  if (lk && !lk.tryLock(1000)) return { ok: true, skipped: 'running' };
+  try {
+    // 2026-11-19 5분 → 1분: 편집기에서 installTrackTrigger를 다시 돌리지 않아도, 처음 한 번 스스로 1분 트리거로 바꿔 끼움
+    var pp = PropertiesService.getScriptProperties();
+    if (pp.getProperty('LW_EVERY') !== '1') {
+      ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'landingWatch') ScriptApp.deleteTrigger(t); });
+      ScriptApp.newTrigger('landingWatch').timeBased().everyMinutes(1).create();
+      pp.setProperty('LW_EVERY', '1');
+    }
+    return landingWatchRun();
+  } finally { if (lk) lk.releaseLock(); }
+}
+function landingWatchRun() {
   var props = PropertiesService.getScriptProperties();
   var oldest = props.getProperty('LANDING_LAST_TS') || String(Date.now() / 1000 - 3600);
   var res = slackApi('conversations.history', { channel: LANDING_CH, oldest: oldest, limit: 50 });
@@ -1184,11 +1243,14 @@ function landingWatch() {
     if (!LL.isSheetHidden()) LL.hideSheet();
     LL.appendRow([new Date(Number(m.ts) * 1000), q.name, "'" + phoneHash(q.phone), "'" + m.ts]);
     var mt = matchDelivered(q.name, q.phone, stores, q.region);
-    if (!mt) return;
-    var text = landingComment(mt.store), sent = '';
-    if (live) { var r = slackApi('chat.postMessage', { channel: LANDING_CH, thread_ts: m.ts, text: text }); sent = r.ok ? 'Y' : '실패: ' + r.error; }
-    log.appendRow([new Date(), new Date(Number(m.ts) * 1000), q.name, mt.how, mt.store.name, text, sent || '안 보냄(설정 B8)']);
-    hit++;
+    if (mt && !mt.sure) log.appendRow([new Date(), new Date(Number(m.ts) * 1000), q.name, mt.how + ' (' + mt.score + '점)', mt.store.name, '', '확인 필요(댓글 안 함)']);
+    if (mt && mt.sure) {
+      var text = landingComment(mt.store), sent = '';
+      if (live) { var r = slackApi('chat.postMessage', { channel: LANDING_CH, thread_ts: m.ts, text: text }); sent = r.ok ? 'Y' : '실패: ' + r.error; }
+      log.appendRow([new Date(), new Date(Number(m.ts) * 1000), q.name, mt.how + ' (' + mt.score + '점)', mt.store.name, text, sent || '안 보냄(설정 B8)']);
+      hit++;
+    }
+    props.setProperty('LANDING_LAST_TS', m.ts);   // 한 건 끝날 때마다 적어 둠(중간에 멈춰도 다음 실행에서 같은 댓글을 다시 안 닮)
   });
   props.setProperty('LANDING_LAST_TS', msgs[msgs.length - 1].ts);
   return { ok: true, seen: msgs.length, matched: hit, live: live };

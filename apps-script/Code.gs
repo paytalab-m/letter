@@ -628,7 +628,7 @@ function notifySlack(d, first, who) {
   // 슬랙 알림: 전화하는 사람이 볼 순서(누구에게 · 언제 → 통화 때 말할 내용 → 분석용 참고). 이모지 없이 「항목: 값」 한 줄에 하나,
   // 묶음 사이는 빈 줄, 연락처 · 통화 희망만 굵게. 날짜는 「10월 23일」로 통일
   var lines = [
-    '*' + (d.test ? '[시험] ' : '') + '편지 QR 문의 · ' + store + (d.edit ? ' (연락처 수정)' : '') + '*',
+    '✉️ *' + (d.test ? '[시험] ' : '') + '[편지] QR 문의 · ' + store + (d.edit ? ' (연락처 수정)' : '') + '*',
     '',
     '*연락처: ' + (tel || '-') + '*',
     '*통화 희망: ' + (d.time || '-') + '*',
@@ -1203,7 +1203,7 @@ function landingComment(s) {
   var who = hand.length === 1
     ? '패써 「' + hand[0].nick + '」님이 ' + md(hand[0].day) + '에 편지를 건넨 매장이에요.'
     : '패써 ' + hand.map(function (x) { return '「' + x.nick + '」님(' + md(x.day) + ')'; }).join(', ') + ', ' + hand.length + '분이 편지를 건넨 매장이에요.';
-  var lines = ['💌 이 매장은 ' + who];
+  var lines = ['✉️ *[편지]* 이 매장은 ' + who];
   if (s.qr) lines.push('사장님은 ' + md(s.qr) + '에 편지 속 QR로 손님 요청 페이지를 열어 보셨어요.');
   lines.push('통화하실 때 "손님이 전해 드린 편지 보셨죠?"로 시작하시면 이야기가 쉬워요. 히스토리 참고 부탁드려요.');
   lines.push(LANDING_TAG);
@@ -1248,7 +1248,8 @@ function landingWatchRun() {
   if (!res.ok) return { ok: false, err: res.error };
   var msgs = (res.messages || []).filter(function (m) { return !m.thread_ts || m.thread_ts === m.ts; }).sort(function (a, b) { return Number(a.ts) - Number(b.ts); });
   if (!msgs.length) return { ok: true, seen: 0 };
-  var stores = deliveredStores(), live = setting('B8').toUpperCase() === 'Y', log = sheet('랜딩문의 매칭', MATCH_HEAD), hit = 0;
+  var stores = deliveredStores(); try { dmStores(stores); } catch (e) {}
+  var live = setting('B8').toUpperCase() === 'Y', log = sheet('랜딩문의 매칭', MATCH_HEAD), hit = 0;
   msgs.forEach(function (m) {
     var q = parseLanding(m.text);
     if (!q) return;
@@ -1258,7 +1259,7 @@ function landingWatchRun() {
     var mt = matchDelivered(q.name, q.phone, stores, q.region);
     if (mt && !mt.sure) log.appendRow([new Date(), new Date(Number(m.ts) * 1000), q.name, mt.how + ' (' + mt.score + '점)', mt.store.name, '', '확인 필요(댓글 안 함)']);
     if (mt && mt.sure) {
-      var text = landingComment(mt.store), sent = '';
+      var text = mt.store.dm ? dmComment(mt.store) : landingComment(mt.store), sent = '';
       if (live) { var r = slackApi('chat.postMessage', { channel: LANDING_CH, thread_ts: m.ts, text: text }); sent = r.ok ? 'Y' : '실패: ' + r.error; }
       log.appendRow([new Date(), new Date(Number(m.ts) * 1000), q.name, mt.how + ' (' + mt.score + '점)', mt.store.name, text, sent || '안 보냄(설정 B8)']);
       hit++;
@@ -1635,7 +1636,7 @@ function dmAsk(d, cp, row) {
   try { who = whoCalls({ tel: d.tel, c: '', uid: '', sid: cp.sid }); } catch (e) {}
   try { hist = storeHist(cp.sid, cp.store); } catch (e) {}
   var lines = [
-    '*' + (d.test ? '[시험] ' : '') + '전화 문의 · ' + cp.store + (d.edit ? ' (연락처 수정)' : '') + '*',
+    dmTag() + ' *' + (d.test ? '[시험] ' : '') + '사장님 문의 · ' + cp.store + (d.edit ? ' (연락처 수정)' : '') + '*',
     '_브랜드 메시지 랜딩에서 남긴 문의 · 편지 없음_',
     '',
     '*연락처: ' + (tel || '-') + '*',
@@ -1666,4 +1667,30 @@ function dmAsk(d, cp, row) {
     var r = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify({ text: text }), muteHttpExceptions: true });
     return (r.getResponseCode() === 200 ? 'Y' : '실패 ' + r.getResponseCode()) + why;
   } catch (err) { return '실패' + why; }
+}
+
+// 수요 안내 대상 매장(「수요 안내 대상」 탭)도 랜딩 문의 짝 맞추기에 넣음. 키는 「dm:」을 붙여 편지 매장과 섞이지 않게(2026-11-20)
+function dmStores(out) {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(DM_TAB);
+  if (!sh || sh.getLastRow() < 2) return out;
+  sh.getRange(2, 1, sh.getLastRow() - 1, DM_HEAD.length).getValues().forEach(function (r) {
+    var code = String(r[0] || ''), name = String(r[3] || '');
+    if (!code || !name) return;
+    var o = { dm: true, code: code, sid: String(r[2] || ''), name: name, hand: [], qr: r[15] instanceof Date ? r[15] : null, tels: {},
+      sent: r[11] instanceof Date ? r[11] : null, result: String(r[12] || ''), n: r[5], views: Number(r[14]) || 0 };
+    var h = phoneHash(r[4]); if (h) o.tels[h] = true;
+    out['dm:' + (o.sid || code)] = o;
+  });
+  return out;
+}
+
+// 수요 안내 말머리(설정 B37, 비면 「[수요 안내]」) · 랜딩 문의 댓글 안내 한 줄(설정 B38). 문구는 시트에서 바꿈
+function dmTag() { return setting('B37') || '[수요 안내]'; }
+function dmComment(s) {
+  var lines = [dmTag() + ' 이 매장은 손님 수요 안내 대상 매장이에요.'];
+  lines.push(s.sent ? '메시지 발송: ' + md2(s.sent) + (s.result ? ' (' + s.result + ')' : '') : '메시지는 아직 보내기 전이에요.');
+  lines.push('랜딩에 보인 손님 수요: ' + (s.n || '-') + '명 / 랜딩 접속: ' + s.views + '번' + (s.qr ? ' (첫 접속 ' + md2(s.qr) + ')' : ''));
+  if (setting('B38')) lines.push(setting('B38'));
+  lines.push(LANDING_TAG);
+  return lines.join('\n');
 }

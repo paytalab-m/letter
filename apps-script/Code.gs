@@ -1643,15 +1643,7 @@ function dmAsk(d, cp, row) {
     '*통화 희망: ' + (d.time || '-') + '*',
     hist ? '*매장 이력: ' + hist + ' → 이미 영업 진행 중일 수 있음. 담당 영업 확인 뒤 연락*' : null,
     who ? '*번호 확인: ' + who + '*' : null,
-    d.judge ? '브라우저 확인: ' + d.judge : null,
-    '매장: ' + cp.store + ' (' + (cp.sid || '-') + ')',
-    '',
-    '랜딩에 보인 손님 수요: ' + (cp.n || '-') + '명',
-    '메시지 발송: ' + (row[11] instanceof Date ? md2(row[11]) : '기록 없음') + ' / 결과: ' + (row[12] || '-'),
-    '랜딩 접속: ' + (Number(row[14]) || 0) + '번 / 첫 접속: ' + (row[15] instanceof Date ? md2(row[15]) : '-'),
-    '',
-    '_참고_',
-    '코드: ' + cp.code + ' / 메시지 식별자: ' + (row[18] || setting('B36') || '-')
+    d.judge ? '브라우저 확인: ' + d.judge : null
   ].filter(function (x) { return x !== null; });
   var text = lines.join('\n'), why = '';
   try {

@@ -1680,8 +1680,6 @@ function dmStores(out) {
 function dmTag() { return setting('B37') || '[수요 안내]'; }
 function dmComment(s) {
   var lines = [dmTag() + ' 이 매장은 손님 수요 안내 대상 매장이에요.'];
-  lines.push(s.sent ? '메시지 발송: ' + md2(s.sent) + (s.result ? ' (' + s.result + ')' : '') : '메시지는 아직 보내기 전이에요.');
-  lines.push('랜딩에 보인 손님 수요: ' + (s.n || '-') + '명 / 랜딩 접속: ' + s.views + '번' + (s.qr ? ' (첫 접속 ' + md2(s.qr) + ')' : ''));
   if (setting('B38')) lines.push(setting('B38'));
   lines.push(LANDING_TAG);
   return lines.join('\n');

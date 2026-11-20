@@ -367,7 +367,16 @@ ul.dl{list-style:none;margin:0}ul.dl li{position:relative;padding-left:12px}ul.d
 html.ld .store,html.ld .nick,html.ld .due{color:transparent!important;background:#EDE7E2;border-radius:4px}
 
 
-</style></head><body><div class="wrap">
+</style><style>/* 수요 안내 랜딩: 요청 손님 카드를 큰 카드 모양으로 키워 롤링(2026-11-20) */
+.said .vc{align-items:flex-start;gap:12px;padding:14px 14px 14px;border-radius:16px;border-color:#F7A77C;box-shadow:0 6px 18px rgba(242,107,29,.10)}
+.said .vc i{width:44px;height:44px;flex:0 0 44px}.said .vc i img{width:44px;height:44px}
+.said .vc>div{flex:1;min-width:0}
+.said .vc b{font-size:16px!important;font-weight:800!important}.said .vc b small{font-size:12.5px!important}
+.said .vc>div>span{margin-top:8px;background:var(--soft);border-radius:10px;padding:10px 12px;font-size:15px!important;line-height:23px!important;color:var(--ink)!important}
+.said .vc span .store,.said .vc span .j{display:inline;margin:0;padding:0;background:none;font-size:inherit!important}
+.said .voices{gap:10px}
+</style>
+</head><body><div class="wrap">
 <div class="nav">패스오더 · 사장님 안내</div>
 
 <section id="main"><div class="pad">
@@ -377,10 +386,7 @@ html.ld .store,html.ld .nick,html.ld .due{color:transparent!important;background
 <div class="stats"><div><b><span class="n132">132</span>명</b><span>패스오더 앱에서<br>찾아봤어요</span></div><div><b><span class="n9">9</span>명</b><span>패스오더 주문을<br>요청했어요</span></div></div>
 
 <div class="sec said" style="margin-top:26px"><div class="h2">손님들이 이렇게 말했어요</div>
-<div class="card hi">
-<div class="who"><div class="av emo"><img id="topAv" src="../owner-qr/assets/img/req_av1.png" alt=""></div><div><b><span id="topName">커피**</span> 님</b><small>패스오더 주문을 요청한 손님</small></div></div>
-<div class="say" style="margin-top:12px"><small><span id="topName2">커피**</span>님이 패스오더에 남긴 한마디 · <span class="nb" id="nickDate"></span></small><span id="nickSay"></span></div>
-</div>
+<div class="say" style="display:none"><small><span class="nb" id="nickDate"></span></small><span id="nickSay"></span></div>
 <div class="vh">패스오더 주문을 요청한 손님</div>
 <div class="voices" id="voices"></div>
 </div>
@@ -477,11 +483,7 @@ const AV=['../owner-qr/assets/img/req_av1.png','../owner-qr/assets/img/req_av2.p
   const nd=new Date(today-between(R,3,30)*864e5); document.getElementById('nickDate').textContent=fmt(nd);
   if(Q.get('say')){document.getElementById('nickSay').textContent=Q.get('say');if(Q.get('sd')){const x=new Date(Q.get('sd'));if(!isNaN(x))document.getElementById('nickDate').textContent=fmt(x);}}
   // 요청 손님: 4명까지 카드, 나머지는 「N명 더」
-  const show=Math.min(8,DATA.n_req-1,SAYS.length-1); const used=new Set(); const says=[...SAYS]; let html='';
-  // 맨 위 큰 카드: 요청 손님 한 명의 한마디(아래 카드와 겹치지 않게 먼저 한 명 · 한마디를 뺌). 특정 손님 · 편지와 무관
-  {const ti=between(R,0,NAMES.length-1); used.add(ti); const ts=says.splice(between(R,0,says.length-1),1)[0];
-   document.getElementById('topName').textContent=document.getElementById('topName2').textContent=NAMES[ti]+'**';
-   document.getElementById('topAv').src=AV[ti%AV.length]; if(!Q.get('say'))document.getElementById('nickSay').innerHTML=ts.join('<br>');}
+  const show=Math.min(8,DATA.n_req,SAYS.length); const used=new Set(); const says=[...SAYS]; let html='';
   const days=[]; for(let i=0;i<DATA.n_req;i++)days.push(between(R,2,90)); days.sort((a,b)=>a-b);
   for(let i=0;i<show;i++){
     let ni; do{ni=between(R,0,NAMES.length-1);}while(used.has(ni)); used.add(ni);
@@ -495,7 +497,7 @@ const AV=['../owner-qr/assets/img/req_av1.png','../owner-qr/assets/img/req_av2.p
     const cards=[...box.querySelectorAll('.vc')];
     if(cards.length<3||matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const win=document.createElement('div'); win.className='vwin'; box.parentNode.insertBefore(win,box); win.appendChild(box);
-    const G=6; const fit=()=>{let m=0;const c=[...box.children];for(let i=0;i<c.length;i++){const h=c[i].offsetHeight+G+c[(i+1)%c.length].offsetHeight;if(h>m)m=h;}win.style.height=m+'px';};
+    const G=10; const fit=()=>{let m=0;const c=[...box.children];for(let i=0;i<c.length;i++){const h=c[i].offsetHeight+G+c[(i+1)%c.length].offsetHeight;if(h>m)m=h;}win.style.height=m+'px';};
     fit(); addEventListener('resize',fit);
     let hold=false; win.addEventListener('pointerdown',()=>hold=true); addEventListener('pointerup',()=>hold=false); win.addEventListener('pointerleave',()=>hold=false);
     // 화면에 보일 때만 돌고, 끝나지 않고 계속 돈다(예전: 열자마자 시작해 한 바퀴 뒤 멈춤 → 내려왔을 땐 이미 멈춰 있었음)

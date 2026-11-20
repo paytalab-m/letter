@@ -378,8 +378,8 @@ html.ld .store,html.ld .nick,html.ld .due{color:transparent!important;background
 
 <div class="sec said" style="margin-top:26px"><div class="h2">손님들이 이렇게 말했어요</div>
 <div class="card hi">
-<div class="who"><div class="av emo"><img src="../owner-qr/assets/img/nick_avatar.png" alt=""></div><div><b><span class="nick">라떼좋아</span>님</b><small>이 편지를 전한 손님</small></div></div>
-<div class="say" style="margin-top:12px"><small><span class="nick">라떼좋아</span>님이 패스오더에 남긴 한마디 · <span class="nb" id="nickDate">10월 2일</span></small><span id="nickSay">퇴근길에 늘 들러요.<br>앱으로 미리 주문하고 바로 받아 가고 싶어요.</span></div>
+
+<div class="say" style="margin-top:12px;display:none"><small><span class="nb" id="nickDate"></span></small><span id="nickSay"></span></div>
 </div>
 <div class="vh">패스오더 주문을 요청한 손님</div>
 <div class="voices" id="voices"></div>
@@ -393,7 +393,7 @@ html.ld .store,html.ld .nick,html.ld .due{color:transparent!important;background
 <div class="alarm"><p class="mnote"><svg class="sir" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18v-5a6 6 0 0 1 12 0v5" fill="#E5372A"/><rect x="4" y="18" width="16" height="3" rx="1" fill="#B8231A"/><path d="M10 13a2 2 0 0 1 2-2" stroke="#fff" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg>지금은 패스카페에서 <b>패스오더로 주문할 수 없어서,</b><br>손님들이 다른 가게로 넘어가고 있어요</p>
 <div class="lost"><div class="big"><span class="n132">132</span>명</div><div><b><span class="store">패스카페</span><span class="j" data-a="을" data-b="를">를</span> 찾아본 날,<br>다른 가게에서 주문했어요</b></div></div></div></div>
 
-<!-- 3 이 편지를 받은 사장님께만 -->
+<!-- 3 -->
 <div class="sec"><div class="k">사장님 가게에서 달라지는 점</div><div class="h2">패스오더를 시작하시면<br>이렇게 달라져요</div>
 <div class="pair one"><div class="appc on"><div class="chrome"><span>‹</span><b>더보기</b><span></span></div><div class="filt"><span>전화매장</span><span class="on">가까운 순 ⌄</span><span>영업 중</span></div><div class="sf"><div class="exm">예시 이미지</div><div class="awn"></div><div class="win"></div><div class="door"></div><div class="board"></div><div class="bg ev">⚡ 매장이벤트</div><div class="bg pt2">P 적립</div></div><div class="info"><div class="rc">5분 후 수령</div><div class="nm"><span class="store">패스카페</span></div><div class="meta">⭐ 주문 시작 · 신규</div><div class="meta">📍 136.2m · 걸어서 2분</div><div class="go">가져갈게요</div></div><div class="lb">시작하면 이렇게 · 예시</div></div></div>
 <div class="gain">
@@ -423,7 +423,7 @@ html.ld .store,html.ld .nick,html.ld .due{color:transparent!important;background
 <text x="268" y="211" text-anchor="middle" font-size="9.5" fill="#C4541A">시작하면 여기서도 주문</text>
 </svg>
 <p class="tease">사장님 가게까지 찾아온 손님이<br>주문하지 못하고 떠난다면, 아깝지 않나요?</p>
-</div><div class="gift" style="margin-top:12px"><i><img src="../owner-qr/assets/img/gift.png" alt=""></i><span>안내 신청만 하셔도<br>손님들의 소식을 전해 주신<br><b><span class="nick">라떼좋아</span>님</b>께 패스오더가 <span class="nb">감사 쿠폰</span>을 드려요<br><small class="gd"><span class="due">11월 26일</span>까지 신청해 주세요</small></span></div></div>
+</div></div>
 </div>
 <div class="bar"><div class="note">궁금한 것만 물어보셔도 돼요</div><button class="btn" onclick="openSheet()">안내 신청하기 &gt;</button></div>
 </section>
@@ -432,7 +432,7 @@ html.ld .store,html.ld .nick,html.ld .due{color:transparent!important;background
 <section id="done" hidden><div class="pad">
 <div class="done"><div class="ck">✓</div><div class="h1">안내 신청이 접수됐어요</div>
 </div>
-<ul class="note2 dl"><li><span data-cfg="CALL_DAYS">하루</span> 안에 패스오더 담당자가 안내드릴게요</li><li>안내받을 연락처 <b id="telShow">010-0000-0000</b></li><li>안내받기 편한 시간 <b id="tm2"><span class="nb">오후 2시~4시</span></b></li><li>패스오더가 <span class="nick">라떼좋아</span>님께 <b>감사 쿠폰</b>을 보내드릴 예정이에요</li></ul>
+<ul class="note2 dl"><li><span data-cfg="CALL_DAYS">하루</span> 안에 패스오더 담당자가 안내드릴게요</li><li>안내받을 연락처 <b id="telShow">010-0000-0000</b></li><li>안내받기 편한 시간 <b id="tm2"><span class="nb">오후 2시~4시</span></b></li></ul>
 <p class="relink">연락처나 시간을 잘못 고르셨다면 <span class="link2" onclick="openSheet()">고치기</span></p><b id="tm" hidden></b>
 <div class="sub" style="text-align:center;margin-top:16px">더 하실 일은 없어요.<br>궁금한 건 안내받으실 때 편하게 물어보세요.</div>
 </div></section>
@@ -464,7 +464,7 @@ const _v=num('v')??between(R,...RANGE.view);
 const REQ_FIXED=9;   // 요청 손님 수: 테스트 단계는 모든 편지 9명으로 고정(2026-10-26 결정 · 편지 QR 안내 「손님 등 9명」과 같게). 난수는 그대로 한 번 뽑아 다른 숫자가 바뀌지 않게 함
 const _r=num('r')??(between(R,...RANGE.req),REQ_FIXED);
 const _e=num('e')??Math.round(_v*(RANGE.elseRate[0]+R()*(RANGE.elseRate[1]-RANGE.elseRate[0])));
-const DATA={store:Q.get('store')||'패스카페',nick:Q.get('nick')||'라떼좋아',n_view:_v,n_req:_r,n_else:_e,code:Q.get('c')||'L-0001',due:Q.get('due')||''};
+const DATA={store:Q.get('store')||'패스카페',nick:'',n_view:_v,n_req:_r,n_else:_e,code:Q.get('c')||'L-0001',due:Q.get('due')||''};
 // 요청 손님 카드: 앱 「도입 요청」의 이유 4가지(빠른 픽업 · 적립 · 전화보다 쉬움 · 시간 절약)에서만 고름. 최근 90일 안 날짜, 최신순
 const NAMES=['커피','달콤','민트','하루','소소','봄날','라라','모카','연두','단비','초코','구름'];
 const _jo=w=>{const c=w.charCodeAt(w.length-1)-0xAC00;return c>=0&&c<11172&&c%28?'은':'는'};
@@ -476,7 +476,6 @@ const AV=['../owner-qr/assets/img/req_av1.png','../owner-qr/assets/img/req_av2.p
   // 편지 손님 한마디: 최근 30일 안
   const nd=new Date(today-between(R,3,30)*864e5); document.getElementById('nickDate').textContent=fmt(nd);
   if(Q.get('say')){document.getElementById('nickSay').textContent=Q.get('say');if(Q.get('sd')){const x=new Date(Q.get('sd'));if(!isNaN(x))document.getElementById('nickDate').textContent=fmt(x);}}
-  else if(Q.get('c')){const sb=document.querySelector('.say');sb.innerHTML='<span><span class="nick">'+DATA.nick+'</span>님이 사장님께 편지를 전해 주셨어요.</span>';}
   // 요청 손님: 4명까지 카드, 나머지는 「N명 더」
   const show=Math.min(8,DATA.n_req,SAYS.length); const used=new Set(); const says=[...SAYS]; let html='';
   const days=[]; for(let i=0;i<DATA.n_req;i++)days.push(between(R,2,90)); days.sort((a,b)=>a-b);

@@ -104,6 +104,10 @@ function doPost(e) {
     var ok = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
     return ContentService.createTextOutput(JSON.stringify(ok ? { ok: true, slack: notifyApply({ store: '테스트매장', nick: '테스트', grp: 's', la: '1', g: '1', src: 'call', w: '1', vid: 'TEST-0001', sid: '', ref: 'utm_content=ltr_rcr_benefit&utm_term=ltr_selftest_b1' }) } : { ok: false, reason: 'token' })).setMimeType(ContentService.MimeType.JSON);
   }
+  if (d.type === 'dm_add' || d.type === 'dm_fire') {   // 수요 안내 메시지: 매장 줄 넣기 · 백오피스 발송 API로 보내기. 비밀번호 = 「설정」 B2
+    var okD = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
+    return ContentService.createTextOutput(JSON.stringify(!okD ? { ok: false, reason: 'token' } : d.type === 'dm_add' ? dmAdd(d.rows || []) : dmFire(d))).setMimeType(ContentService.MimeType.JSON);
+  }
   if (d.type === 'msg_test' || d.type === 'msg_run') {   // 알림톡 시험(uid 한 명에게 견본 값으로) · 지금 한 번 돌리기. 비밀번호 = 「설정」 B2
     var okM = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
     return ContentService.createTextOutput(JSON.stringify(!okM ? { ok: false, reason: 'token' } : d.type === 'msg_test' ? msgTest(d.kind, d.uid) : dailyLetterJob())).setMimeType(ContentService.MimeType.JSON);
@@ -1683,4 +1687,67 @@ function dmComment(s) {
   if (setting('B38')) lines.push(setting('B38'));
   lines.push(LANDING_TAG);
   return lines.join('\n');
+}
+
+// ── 수요 안내 메시지 · 백오피스 발송 API(2026-11-20) ─────────────────────────
+// dm_add: 로컬 조회표의 매장(매장ID · 이름 · 손님 수 · 회원/비회원 식별자)을 「수요 안내 대상」에 한 줄씩 넣음. 같은 매장ID는 다시 넣지 않음.
+//   식별자는 「메모」 칸에 U:회원 / N:비회원으로 둠(비공개 시트에만)
+// dm_fire: 아직 안 보낸 줄을 백오피스 발송 API(POST /messages/send · 키 설정 B5 · 메시지 식별자 설정 B36)로 보냄.
+//   test=true면 설정 B9 시험 회원 한 명에게 첫 줄 값으로 한 통만(시트에 표시 안 함). 보내기 전에 먼저 표시해서 두 번 가지 않게 함
+var DM_DAYS = 180;   // 메시지 「최근 #{일자}일」 = 손님 수를 센 기간
+function dmAdd(rows) {
+  var sh = sheet(DM_TAB, DM_HEAD), have = {}, added = [], abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  if (sh.getLastRow() > 1) sh.getRange(2, 3, sh.getLastRow() - 1, 1).getValues().forEach(function (r) { if (r[0]) have[String(r[0])] = true; });
+  rows.forEach(function (x) {
+    var sid = String(x.sid || ''), n = Number(x.n) || 0, id = x.uid ? 'U:' + x.uid : x.nid ? 'N:' + x.nid : '';
+    if (!sid || !x.store || n < 1 || !id || have[sid]) return;
+    var code = 'P'; for (var i = 0; i < 9; i++) code += abc.charAt(Math.floor(Math.random() * abc.length));
+    var link = DM_URL + '?c=' + code + '&r=' + n + '&utm_source=kakao&utm_medium=brandmsg&utm_campaign=owner_demand&utm_content=' + code;
+    var now = new Date();
+    sh.appendRow([code, '', sid, x.store, x.phone ? "'" + String(x.phone).replace(/\D/g, '') : '', n, now, '', '', '동의', now, '', '', link, 0, '', '', id, setting('B36'), now]);
+    have[sid] = true; added.push(x.store);
+  });
+  return { ok: true, added: added.length, stores: added };
+}
+
+function dmReq(id, store, n, link) {
+  var r = { variables: { title: [], content: [String(store), String(DM_DAYS), String(n)], deep_link: [], replacement_title: [], replacement_content: [],
+    message_addon_element: { pc_link: [link], mobile_link: [link], brand_message_wide_item: { image_link: [link] } } } };
+  if (id.indexOf('U:') === 0) r.user_identifier = id.slice(2); else r.non_user_identifier = id.slice(2);
+  return r;
+}
+
+function dmFire(d) {
+  var code = setting('B36');
+  if (!code) return { ok: false, err: '메시지 식별자 없음(설정 B36)' };
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(DM_TAB);
+  if (!sh || sh.getLastRow() < 2) return { ok: false, err: '대상 줄 없음' };
+  var v = sh.getRange(2, 1, sh.getLastRow() - 1, DM_HEAD.length).getValues(), props = PropertiesService.getScriptProperties();
+  var todo = [];
+  v.forEach(function (r, i) {
+    if (!r[0] || r[11] || String(r[9]) !== '동의' || !/^[UN]:/.test(String(r[17])) || props.getProperty('DMSENT_' + r[0])) return;
+    if (d.only && d.only.indexOf(String(r[3])) < 0) return;
+    todo.push({ row: i + 2, code: String(r[0]), store: r[3], n: r[5], link: r[13], id: String(r[17]) });
+  });
+  if (!todo.length) return { ok: true, sent: 0, note: '보낼 줄 없음' };
+  if (d.test) {
+    var tid = setting('B9').split(/[,\s]+/).filter(String)[0];
+    if (!tid) return { ok: false, err: '시험 회원ID 없음(설정 B9)' };
+    var t = todo[0], tl = shortLinks([t.link], '수요 안내 시험')[0];
+    return { ok: true, test: true, store: t.store, res: msgPost(code, [dmReq('U:' + tid, t.store, t.n, tl)]) };
+  }
+  if (d.live !== true) return { ok: true, dry: true, would: todo.map(function (t) { return t.store + ' ' + t.n + '명'; }) };
+  var now = new Date(), links = shortLinks(todo.map(function (t) { return t.link; }), '수요 안내 메시지'), out = { sent: [], failed: [] };
+  todo.forEach(function (t) { sh.getRange(t.row, 12).setValue(now); props.setProperty('DMSENT_' + t.code, Utilities.formatDate(now, 'Asia/Seoul', 'yyyy-MM-dd HH:mm')); });
+  SpreadsheetApp.flush();
+  for (var i = 0; i < todo.length; i += 100) {
+    var part = todo.slice(i, i + 100), res;
+    try { res = msgPost(code, part.map(function (t, k) { return dmReq(t.id, t.store, t.n, links[i + k]); })); } catch (e) { res = { ok: false, err: String(e) }; }
+    part.forEach(function (t) {
+      sh.getRange(t.row, 13).setValue(res.ok ? '접수 ' + res.http : '실패 ' + (res.http || '') + ' ' + (res.err || res.body || ''));
+      (res.ok ? out.sent : out.failed).push(t.store);
+    });
+  }
+  dmSlack('*[수요 안내 · 브랜드 메시지]*\n발송 접수 ' + out.sent.length + '곳' + (out.failed.length ? ' / 실패 ' + out.failed.length + '곳: ' + out.failed.join(', ') : '') + '\n실제 도착은 백오피스 발송 내역에서 확인');
+  return { ok: true, sent: out.sent.length, failed: out.failed };
 }

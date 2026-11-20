@@ -1615,16 +1615,55 @@ function installDmTrigger() {   // 편집기에서 한 번만 실행
   ScriptApp.newTrigger('dmJob').timeBased().everyMinutes(15).create();
 }
 
-// 랜딩 접속 · 문의 → 「수요 안내 랜딩」 + 대상 탭 접속 수 · 첫 접속 · 사장님 문의. 문의만 슬랙(B3)에 알림
+// 랜딩 접속 · 문의 → 「수요 안내 랜딩」 + 대상 탭 접속 수 · 첫 접속 · 사장님 문의. 문의만 슬랙 #편지_qr_문의에 알림(편지 문의와 다른 형식)
 function dmLanding(d, cp) {
   var kind = d.type === 'scan' ? '접속' : d.type === 'inquiry' ? '문의' : '비즈 이동', slack = '';
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(DM_TAB), r = cp.row;
   if (kind === '접속') { sh.getRange(r, 15).setValue((Number(sh.getRange(r, 15).getValue()) || 0) + 1); if (!sh.getRange(r, 16).getValue()) sh.getRange(r, 16).setValue(new Date()); }
   if (kind === '문의') {
     sh.getRange(r, 17).setValue(new Date());
-    var tel = String(d.tel || '').replace(/\D/g, '').replace(/^(\d{3})(\d{3,4})(\d{4})$/, '$1-$2-$3');
-    slack = dmSlack(['*[수요 안내 · 브랜드 메시지] 사장님 문의 · ' + cp.store + (d.edit ? ' (연락처 수정)' : '') + '*', '', '*연락처: ' + (tel || '-') + '*', '*통화 희망: ' + (d.time || '-') + '*',
-      '매장: ' + cp.store + ' / 손님 수요: ' + (cp.n || '-') + '명 / 코드: ' + cp.code].join('\n'));
+    slack = dmAsk(d, cp, sh.getRange(r, 1, 1, DM_HEAD.length).getValues()[0]);
   }
   sheet(DM_LAND_TAB, DM_LAND_HEAD).appendRow([at(d.ts) || new Date(), kind, cp.code, cp.store, kind === '문의' ? txt(d.tel) : '', txt(d.time), txt(d.device), txt(d.app), txt(d.ref), txt(d.bid), txt(d.sig), slack]);
+}
+
+// 수요 안내 랜딩 문의 → #편지_qr_문의. 편지 문의(notifySlack)와 같은 방이지만 제목 · 항목이 달라 한눈에 구분(2026-11-20)
+// 편지 · 손님 정보는 없으므로 넣지 않음. 봇(설정 B7)으로 올리고, 안 되면 웹후크(B1)
+function dmAsk(d, cp, row) {
+  var tel = String(d.tel || '').replace(/\D/g, '').replace(/^(\d{3})(\d{3,4})(\d{4})$/, '$1-$2-$3');
+  var who = '', hist = '';
+  try { who = whoCalls({ tel: d.tel, c: '', uid: '', sid: cp.sid }); } catch (e) {}
+  try { hist = storeHist(cp.sid, cp.store); } catch (e) {}
+  var lines = [
+    '*' + (d.test ? '[시험] ' : '') + '[수요 안내] 사장님 문의 · ' + cp.store + (d.edit ? ' (연락처 수정)' : '') + '*',
+    '_편지 문의 아님 · 브랜드 메시지 랜딩에서 남긴 문의_',
+    '',
+    '*연락처: ' + (tel || '-') + '*',
+    '*통화 희망: ' + (d.time || '-') + '*',
+    hist ? '*매장 이력: ' + hist + ' → 이미 영업 진행 중일 수 있음. 담당 영업 확인 뒤 연락*' : null,
+    who ? '*번호 확인: ' + who + '*' : null,
+    d.judge ? '브라우저 확인: ' + d.judge : null,
+    '매장: ' + cp.store + ' (' + (cp.sid || '-') + ')',
+    '',
+    '랜딩에 보인 손님 수요: ' + (cp.n || '-') + '명',
+    '메시지 발송: ' + (row[11] instanceof Date ? md2(row[11]) : '기록 없음') + ' / 결과: ' + (row[12] || '-'),
+    '랜딩 접속: ' + (Number(row[14]) || 0) + '번 / 첫 접속: ' + (row[15] instanceof Date ? md2(row[15]) : '-'),
+    '',
+    '_참고_',
+    '코드: ' + cp.code + ' / 메시지 식별자: ' + (row[18] || setting('B36') || '-')
+  ].filter(function (x) { return x !== null; });
+  var text = lines.join('\n'), why = '';
+  try {
+    if (setting('B7')) {
+      var m = slackApi('chat.postMessage', { channel: QR_CH, text: text, unfurl_links: false });
+      if (m.ok) return 'Y';
+      why = ' (봇 ' + m.error + ' → 웹후크)';
+    }
+  } catch (e) { why = ' (봇 오류 → 웹후크)'; }
+  var url = slackUrl();
+  if (!url) return '실패' + why;
+  try {
+    var r = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify({ text: text }), muteHttpExceptions: true });
+    return (r.getResponseCode() === 200 ? 'Y' : '실패 ' + r.getResponseCode()) + why;
+  } catch (err) { return '실패' + why; }
 }

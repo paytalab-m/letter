@@ -60,6 +60,10 @@ function doGet(e) {
     // 짧은 주소(go/?k=코드) → 원래 긴 주소. 메시지 변수 길이 제한 때문에 링크를 줄여 보냄(2026-10-27)
     var lk = linkOf(q.k);
     if (lk) out = { ok: true, url: lk };
+  } else if (q.code && isDmCode(q.code)) {
+    // 수요 안내 랜딩(letter/req/): 매장명 · 문의 기한만(2026-11-20)
+    var cs = dmStore(q.code);
+    if (cs) out = { ok: true, store: cs.store, nick: '', due: cs.due };
   } else if (q.code) { // c는 Apps Script 웹 앱이 예약한 이름이라 조회에는 code를 쓴다
     // 점주 페이지: 편지코드로 매장명 · 편지 전한 손님 닉네임 · 문의 기한만 돌려준다
     var lp = letter(q.code);
@@ -117,6 +121,11 @@ function doPost(e) {
       out.history = { ok: hj.ok, error: hj.error, needed: hj.needed };
     }
     return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
+  }
+  if (d.type === 'dm_sync' || d.type === 'dm_run' || d.type === 'dm_preview') {   // 수요 안내 메시지: 노션 읽기만 · 지금 한 번 돌리기 · 보낼 본문 미리 보기(안 보냄). 비밀번호 = 「설정」 B2
+    var okC = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
+    var rc = !okC ? { ok: false, reason: 'token' } : d.type === 'dm_sync' ? dmSync() : d.type === 'dm_preview' ? dmPreview(d.code) : dmJob();
+    return ContentService.createTextOutput(JSON.stringify(rc)).setMimeType(ContentService.MimeType.JSON);
   }
   if (d.type === 'trigger_list') {   // 걸려 있는 자동 실행(트리거) 목록. 비밀번호 = 「설정」 B2
     var okT2 = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
@@ -210,7 +219,9 @@ function doPost(e) {
   if (d.type === 'link_put') return ContentService.createTextOutput(JSON.stringify(linkPut(d))).setMimeType(ContentService.MimeType.JSON);
   if (!d.c && d.code) d.c = d.code;   // 10/23 점주 페이지는 code로 보냄
   if (d.store) d.store = String(d.store).replace(/[☎☏✆]|\uD83D[\uDCDE\uDCF1\uDCF2]/g, '').replace(/\s+/g, ' ').trim(); // 매장명의 ☎ 같은 전화 기호 제거
-  var lp = d.c ? letter(d.c) : null;
+  var lp = d.c && !isDmCode(d.c) ? letter(d.c) : null;
+  var cp = d.c && isDmCode(d.c) ? dmStore(d.c) : null;   // 수요 안내 랜딩(2026-11-20)
+  if (cp) { d.store = cp.store; d.sid = cp.sid; d.nick = ''; }
   if (lp) { d.t = lp.t; d.nick = lp.nick; d.store = lp.store; d.sid = lp.sid; d.uid = d.uid || lp.uid; } // 점주 기록은 편지코드로 손님 · 매장을 시트 값으로 잇는다
   var p = target(d.t) || targetByUid(d.uid);
   // 링크에 값이 있으면 링크 값을, 없으면 「모집대상」 값을 쓴다
@@ -219,7 +230,8 @@ function doPost(e) {
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    if (d.type === 'scan') { if (lp && letterPosted(lp.row)) { addScan(d); markCol(p, QR_MARK_COL); } else res.test = true; }   // 발송일 전 점주 QR 접속 = 시험(시험 인쇄 확인) → 기록 안 함(2026-11-02)
+    if (cp && (d.type === 'scan' || d.type === 'inquiry' || d.type === 'contact_click')) dmLanding(d, cp);   // 수요 안내 랜딩은 「수요 안내 랜딩」 탭에만(편지 탭과 섞지 않음)
+    else if (d.type === 'scan') { if (lp && letterPosted(lp.row)) { addScan(d); markCol(p, QR_MARK_COL); } else res.test = true; }   // 발송일 전 점주 QR 접속 = 시험(시험 인쇄 확인) → 기록 안 함(2026-11-02)
     else if (d.type === 'inquiry' || d.type === 'contact_click') { addInquiry(d); markCol(p, INQ_MARK_COL); }
     else if (d.type === 'letter_view') { if (letterSent(d.uid, d.store)) { addLetterView(d); markCol(p, VIEW_MARK_COL); if (/utm_content=ltr_guide_qr/.test(String(d.ref || ''))) guideArrival(d); } else res.test = true; }   // 발송일 전 「내 편지」 열람 = 시험(시험 인쇄 · 도착 알림 링크 확인) → 기록 안 함(2026-10-30)
     else if (d.type === 'delivered') { addDelivered(d); markCol(p, DELIV_MARK_COL); }
@@ -1430,3 +1442,170 @@ function closedDb() {
   });
 }
 function authClosedDb() { Logger.log('폐업 매장 DB ' + closedDb().length + '줄 읽음'); }
+
+// ── 사장님 수요 안내 메시지 (2026-11-20) ─────────────────────────────────────────────
+// 노션 표(설정 B35)에서 조건에 맞는 매장을 「수요 안내 대상」 탭에 쌓고(dmSync), 기준 일시 다음 영업일 14:30에 비즈톡 브랜드 메시지(dmSend)
+//   → #편지-신청자-알림(설정 B3)에 [수요 안내 · 브랜드 메시지] 머리말로 기록 → 랜딩(letter/req/?c=P…) 접속 · 문의는 「수요 안내 랜딩」 탭
+// 브랜드 메시지는 광고성: 마케팅 수신 동의 칸이 「동의」인 매장만 보냄. 그 외는 「보류」로만 남김. 한 매장에 한 번만(DMSENT_코드).
+// 설정 탭: B30 노션 통합 토큰 · B31 비즈톡 발송 API 주소 · B32 인증 헤더 값 · B33 요청 본문 틀(JSON, {{phone}} {{store}} {{n}} {{link}}) ·
+//   B34 자동 발송(Y일 때만 실제 발송) · B35 노션 연결 설정(JSON: db · filter[속성, 값] · store · phone · n · at · agree · note[속성들])
+var DM_HEAD = ['코드', '노션 페이지', '매장ID', '매장', '사장님 번호', '손님 수요', '기준 일시', '메모 1', '메모 2', '메시지 수신 동의',
+  '발송 예정', '발송 시각', '발송 결과', '랜딩 링크', '랜딩 접속 수', '첫 접속', '사장님 문의', '메모'];
+var DM_LAND_HEAD = ['시각', '종류', '코드', '매장', '연락처', '통화 희망', '기기', '열린 앱', '유입 URL', '브라우저 번호', '기기 특징', '슬랙'];
+var DM_TAB = '수요 안내 대상', DM_LAND_TAB = '수요 안내 랜딩';
+var DM_URL = 'https://paytalab-m.github.io/letter/req/';
+var DM_HOUR = 14, DM_MIN = 30;
+
+function isDmCode(c) { return /^P[A-Z0-9]{9}$/.test(String(c || '')); }
+
+function dmStore(code) {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(DM_TAB);
+  if (!sh || !code) return null;
+  var f = sh.getRange('A:A').createTextFinder(String(code)).matchEntireCell(true).matchCase(true).findNext();
+  if (!f || f.getRow() === 1) return null;
+  var r = sh.getRange(f.getRow(), 1, 1, DM_HEAD.length).getValues()[0];
+  var due = r[10] instanceof Date ? Utilities.formatDate(new Date(r[10].getTime() + 7 * 864e5), 'Asia/Seoul', 'yyyy-MM-dd') : '';
+  return { row: f.getRow(), code: String(r[0]), sid: String(r[2]), store: String(r[3]), n: r[5], due: due };
+}
+
+// 기준 일시 다음 영업일(토 · 일 · 공휴일 뺌) 14:30. 이미 지났으면 지금 다음의 14:30
+function dmSlot(from) {
+  var MG = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('마감 관리');
+  var hol = MG ? String(MG.getRange('B26').getDisplayValue() || '').split(/[,\s]+/).filter(String) : [];
+  var d = addBizDays(from, 1, hol); d.setHours(DM_HOUR, DM_MIN, 0, 0);
+  var now = new Date();
+  while (d < now) { d = addBizDays(d, 1, hol); d.setHours(DM_HOUR, DM_MIN, 0, 0); }
+  return d;
+}
+
+function dmNotion(token, cfg) {
+  var out = [], cursor = null;
+  do {
+    var body = { page_size: 100 };
+    if (cfg.filter) body.filter = { property: cfg.filter[0], select: { equals: cfg.filter[1] } };
+    if (cursor) body.start_cursor = cursor;
+    var res = UrlFetchApp.fetch('https://api.notion.com/v1/databases/' + cfg.db + '/query', { method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      headers: { Authorization: 'Bearer ' + token, 'Notion-Version': '2022-06-28' }, payload: JSON.stringify(body) });
+    if (res.getResponseCode() !== 200) throw new Error('노션 ' + res.getResponseCode() + ' ' + res.getContentText().slice(0, 200));
+    var j = JSON.parse(res.getContentText());
+    out = out.concat(j.results || []); cursor = j.has_more ? j.next_cursor : null;
+  } while (cursor);
+  var val = function (p) {
+    if (!p) return '';
+    if (p.type === 'title' || p.type === 'rich_text') return (p[p.type] || []).map(function (x) { return x.plain_text; }).join('');
+    if (p.type === 'select') return p.select ? p.select.name : '';
+    if (p.type === 'date') return p.date ? p.date.start : '';
+    if (p.type === 'phone_number' || p.type === 'number') return p[p.type] == null ? '' : p[p.type];
+    return '';
+  };
+  return out.map(function (pg) {
+    var P = pg.properties || {};
+    return { id: pg.id, store: val(P[cfg.store]), phone: val(P[cfg.phone]), n: val(P[cfg.n]), at: val(P[cfg.at]), agree: val(P[cfg.agree]),
+      note: (cfg.note || []).map(function (k) { return val(P[k]); }) };
+  });
+}
+
+// 노션 → 「수요 안내 대상」. 새 매장은 코드 · 발송 예정을 만들고, 이미 있는 매장은 메모 · 동의만 새로 씀(발송 예정은 안 바꿈)
+function dmSync() {
+  var token = setting('B30'), cfg;
+  try { cfg = JSON.parse(setting('B35') || 'null'); } catch (e) { cfg = null; }
+  if (!token || !cfg || !cfg.db) return { ok: false, err: '노션 설정 없음(설정 B30 · B35)' };
+  var pages = dmNotion(token, cfg), sh = sheet(DM_TAB, DM_HEAD), have = {}, added = [];
+  if (sh.getLastRow() > 1) sh.getRange(2, 2, sh.getLastRow() - 1, 1).getValues().forEach(function (r, i) { have[String(r[0])] = i + 2; });
+  var abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  pages.forEach(function (p) {
+    var row = have[p.id];
+    if (row) { sh.getRange(row, 8, 1, 3).setValues([[p.note[0] || '', p.note[1] || '', p.agree]]); return; }
+    var code = 'P'; for (var i = 0; i < 9; i++) code += abc.charAt(Math.floor(Math.random() * abc.length));
+    var when = p.at ? new Date(p.at) : new Date(), due = dmSlot(when);
+    var link = DM_URL + '?c=' + code + (p.n ? '&r=' + p.n : '') + '&utm_source=kakao&utm_medium=brandmsg&utm_campaign=owner_demand&utm_content=' + code;
+    sh.appendRow([code, p.id, '', p.store, "'" + String(p.phone).replace(/\D/g, ''), p.n, when, p.note[0] || '', p.note[1] || '', p.agree, due, '', '', link, 0, '', '', '']);
+    added.push({ store: p.store, due: due, agree: p.agree });
+  });
+  return { ok: true, notion: pages.length, added: added };
+}
+
+// 비즈톡 발송 한 건. 요청 모양은 비즈톡 문서대로 설정 B33에 JSON 틀로 적음(코드에 추측해서 넣지 않음)
+function bizSend(v) {
+  var url = setting('B31'), auth = setting('B32'), tpl = setting('B33');
+  if (!url || !tpl) return { ok: false, err: '비즈톡 설정 없음(설정 B31 · B33)' };
+  var body = tpl.replace(/\{\{(\w+)\}\}/g, function (m, k) { return JSON.stringify(String(v[k] == null ? '' : v[k])).slice(1, -1); });
+  var opt = { method: 'post', contentType: 'application/json; charset=utf-8', payload: body, muteHttpExceptions: true };
+  if (auth) opt.headers = { Authorization: auth };
+  var res = UrlFetchApp.fetch(url, opt), code = res.getResponseCode();
+  return { ok: code >= 200 && code < 300, http: code, body: res.getContentText().slice(0, 200) };
+}
+
+function dmPreview(code) {
+  var c = dmStore(code);
+  if (!c) return { ok: false, err: '코드 없음' };
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(DM_TAB), r = sh.getRange(c.row, 1, 1, DM_HEAD.length).getValues()[0];
+  var tpl = setting('B33'), v = { phone: String(r[4]).replace(/\D/g, ''), store: r[3], n: r[5], link: r[13] };
+  return { ok: true, values: v, body: tpl ? tpl.replace(/\{\{(\w+)\}\}/g, function (m, k) { return String(v[k] == null ? '' : v[k]); }) : '(설정 B33 비어 있음)' };
+}
+
+// 발송 예정이 지난 매장: 동의 = 「동의」면 보냄, 아니면 「보류」로 한 번만 남김. 보내기 전에 먼저 표시(두 번 가는 것보다 안 가는 게 나음)
+function dmSend(live) {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(DM_TAB), out = { sent: [], failed: [], held: [], due: [] };
+  if (!sh || sh.getLastRow() < 2) return out;
+  var v = sh.getRange(2, 1, sh.getLastRow() - 1, DM_HEAD.length).getValues(), now = new Date(), props = PropertiesService.getScriptProperties();
+  v.forEach(function (r, i) {
+    var row = i + 2, code = String(r[0]);
+    if (!code || r[11] || !(r[10] instanceof Date) || r[10] > now || props.getProperty('DMSENT_' + code)) return;
+    if (String(r[9]) !== '동의') { if (!r[12]) { sh.getRange(row, 13).setValue('보류: 메시지 수신 동의 없음'); out.held.push(r[3]); } return; }
+    if (!live) { out.due.push(r[3]); return; }
+    sh.getRange(row, 12).setValue(now); props.setProperty('DMSENT_' + code, Utilities.formatDate(now, 'Asia/Seoul', 'yyyy-MM-dd HH:mm')); SpreadsheetApp.flush();
+    var link = shortLinks([r[13]], '수요 안내 브랜드 메시지')[0];
+    var res;
+    try { res = bizSend({ phone: String(r[4]).replace(/\D/g, ''), store: r[3], n: r[5], link: link }); } catch (e) { res = { ok: false, err: String(e) }; }
+    sh.getRange(row, 13).setValue(res.ok ? '성공 ' + res.http : '실패 ' + (res.http || '') + ' ' + (res.err || res.body || ''));
+    (res.ok ? out.sent : out.failed).push(r[3] + (res.ok ? '' : ' (' + (res.err || 'HTTP ' + res.http) + ')'));
+  });
+  return out;
+}
+
+function dmSlack(text) {
+  var url = slackUrl('SLACK_WEBHOOK_APPLY', 'B3');
+  if (!url) return '웹후크 없음';
+  try { var r = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify({ text: text }), muteHttpExceptions: true }); return r.getResponseCode() === 200 ? 'Y' : '실패 ' + r.getResponseCode(); }
+  catch (e) { return '실패'; }
+}
+
+function md2(d) { return d instanceof Date ? Utilities.formatDate(d, 'Asia/Seoul', 'M/d') + '(' + '일월화수목금토'.charAt(d.getDay()) + ') ' + Utilities.formatDate(d, 'Asia/Seoul', 'HH:mm') : ''; }
+
+// 15분마다(installDmTrigger). 노션 읽기 → 보낼 때 된 것 보내기 → 바뀐 게 있을 때만 슬랙 한 번
+function dmJob() {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) return { ok: false, reason: '이미 도는 중' };
+  try {
+    var sy; try { sy = dmSync(); } catch (e) { sy = { ok: false, err: String(e) }; }
+    var live = setting('B34').toUpperCase() === 'Y', se = dmSend(live), L = ['*[수요 안내 · 브랜드 메시지]*'];
+    if (sy.added && sy.added.length) L.push('발송 예약 ' + sy.added.length + '곳: ' + sy.added.map(function (a) { return a.store + ' ' + md2(a.due) + (a.agree === '동의' ? '' : ' (수신 동의 없음 → 보내지 않음)'); }).join(' / '));
+    if (se.sent.length) L.push('발송 성공 ' + se.sent.length + '곳: ' + se.sent.join(', '));
+    if (se.failed.length) L.push('발송 실패 ' + se.failed.length + '곳: ' + se.failed.join(', ') + ' → 다시 안 보냄, 비즈톡 발송 내역 확인');
+    if (se.held.length) L.push('보류 ' + se.held.length + '곳(메시지 수신 동의 없음): ' + se.held.join(', '));
+    if (se.due.length) L.push('발송 시각 지남 ' + se.due.length + '곳: ' + se.due.join(', ') + ' (자동 발송 꺼짐 · 설정 B34)');
+    if (!sy.ok) L.push('노션 읽기 실패: ' + sy.err);
+    if (L.length > 1) dmSlack(L.join('\n'));
+    return { ok: true, sync: sy, send: se, live: live };
+  } finally { lock.releaseLock(); }
+}
+
+function installDmTrigger() {   // 편집기에서 한 번만 실행
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'dmJob') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('dmJob').timeBased().everyMinutes(15).create();
+}
+
+// 랜딩 접속 · 문의 → 「수요 안내 랜딩」 + 대상 탭 접속 수 · 첫 접속 · 사장님 문의. 문의만 슬랙(B3)에 알림
+function dmLanding(d, cp) {
+  var kind = d.type === 'scan' ? '접속' : d.type === 'inquiry' ? '문의' : '비즈 이동', slack = '';
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(DM_TAB), r = cp.row;
+  if (kind === '접속') { sh.getRange(r, 15).setValue((Number(sh.getRange(r, 15).getValue()) || 0) + 1); if (!sh.getRange(r, 16).getValue()) sh.getRange(r, 16).setValue(new Date()); }
+  if (kind === '문의') {
+    sh.getRange(r, 17).setValue(new Date());
+    var tel = String(d.tel || '').replace(/\D/g, '').replace(/^(\d{3})(\d{3,4})(\d{4})$/, '$1-$2-$3');
+    slack = dmSlack(['*[수요 안내 · 브랜드 메시지] 사장님 문의 · ' + cp.store + (d.edit ? ' (연락처 수정)' : '') + '*', '', '*연락처: ' + (tel || '-') + '*', '*통화 희망: ' + (d.time || '-') + '*',
+      '매장: ' + cp.store + ' / 손님 수요: ' + (cp.n || '-') + '명 / 코드: ' + cp.code].join('\n'));
+  }
+  sheet(DM_LAND_TAB, DM_LAND_HEAD).appendRow([at(d.ts) || new Date(), kind, cp.code, cp.store, kind === '문의' ? txt(d.tel) : '', txt(d.time), txt(d.device), txt(d.app), txt(d.ref), txt(d.bid), txt(d.sig), slack]);
+}

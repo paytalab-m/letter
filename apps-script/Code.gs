@@ -1748,7 +1748,7 @@ function dmFire(d) {
       (res.ok ? out.sent : out.failed).push(t.store);
     });
   }
-  dmSlack('*[수요 안내 · 브랜드 메시지]*\n발송 접수 ' + out.sent.length + '곳' + (out.failed.length ? ' / 실패 ' + out.failed.length + '곳: ' + out.failed.join(', ') : '') + '\n실제 도착은 백오피스 발송 내역에서 확인');
+  // 슬랙 알림 없음(2026-11-20 요청)
   return { ok: true, sent: out.sent.length, failed: out.failed };
 }
 
@@ -1763,7 +1763,7 @@ function dmSchedule(d) {
   list.push({ at: at.getTime(), only: only });
   props.setProperty('DM_SCHEDULE', JSON.stringify(list));
   ScriptApp.newTrigger('dmScheduledFire').timeBased().at(at).create();
-  dmSlack('*[수요 안내 · 브랜드 메시지]*\n발송 예약 ' + only.length + '곳 · ' + md2(at) + ': ' + only.join(', '));
+  // 슬랙 알림 없음(2026-11-20 요청)
   return { ok: true, at: Utilities.formatDate(at, 'Asia/Seoul', 'yyyy-MM-dd HH:mm'), stores: only };
 }
 function dmScheduledFire() {

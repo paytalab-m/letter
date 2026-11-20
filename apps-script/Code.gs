@@ -1444,13 +1444,14 @@ function closedDb() {
 function authClosedDb() { Logger.log('폐업 매장 DB ' + closedDb().length + '줄 읽음'); }
 
 // ── 사장님 수요 안내 메시지 (2026-11-20) ─────────────────────────────────────────────
-// 노션 표(설정 B35)에서 조건에 맞는 매장을 「수요 안내 대상」 탭에 쌓고(dmSync), 기준 일시 다음 영업일 14:30에 비즈톡 브랜드 메시지(dmSend)
+// 「수요 안내 대상」 탭에 매장을 한 줄씩 넣으면(손으로 · 또는 설정 B35가 있으면 노션에서 dmSync) 「발송 예정」(기준 일시 다음 영업일 14:30)에
+//   그 줄의 「메시지 식별자」(비우면 설정 B36)로 비즈톡 브랜드 메시지(dmSend). 새 줄은 슬랙에 예약 알림 한 번(「예약 알림」 칸)
 //   → #편지-신청자-알림(설정 B3)에 [수요 안내 · 브랜드 메시지] 머리말로 기록 → 랜딩(letter/req/?c=P…) 접속 · 문의는 「수요 안내 랜딩」 탭
 // 브랜드 메시지는 광고성: 마케팅 수신 동의 칸이 「동의」인 매장만 보냄. 그 외는 「보류」로만 남김. 한 매장에 한 번만(DMSENT_코드).
 // 설정 탭: B30 노션 통합 토큰 · B31 비즈톡 발송 API 주소 · B32 인증 헤더 값 · B33 요청 본문 틀(JSON, {{phone}} {{store}} {{n}} {{link}}) ·
-//   B34 자동 발송(Y일 때만 실제 발송) · B35 노션 연결 설정(JSON: db · filter[속성, 값] · store · phone · n · at · agree · note[속성들])
+//   B34 자동 발송(Y일 때만 실제 발송) · B35 노션 연결 설정(JSON · 비우면 노션 안 읽음) · B36 기본 메시지 식별자. 본문 틀에서 {{tpl}} = 메시지 식별자
 var DM_HEAD = ['코드', '노션 페이지', '매장ID', '매장', '사장님 번호', '손님 수요', '기준 일시', '메모 1', '메모 2', '메시지 수신 동의',
-  '발송 예정', '발송 시각', '발송 결과', '랜딩 링크', '랜딩 접속 수', '첫 접속', '사장님 문의', '메모'];
+  '발송 예정', '발송 시각', '발송 결과', '랜딩 링크', '랜딩 접속 수', '첫 접속', '사장님 문의', '메모', '메시지 식별자', '예약 알림'];
 var DM_LAND_HEAD = ['시각', '종류', '코드', '매장', '연락처', '통화 희망', '기기', '열린 앱', '유입 URL', '브라우저 번호', '기기 특징', '슬랙'];
 var DM_TAB = '수요 안내 대상', DM_LAND_TAB = '수요 안내 랜딩';
 var DM_URL = 'https://paytalab-m.github.io/letter/req/';
@@ -1519,10 +1520,9 @@ function dmSync() {
     var code = 'P'; for (var i = 0; i < 9; i++) code += abc.charAt(Math.floor(Math.random() * abc.length));
     var when = p.at ? new Date(p.at) : new Date(), due = dmSlot(when);
     var link = DM_URL + '?c=' + code + (p.n ? '&r=' + p.n : '') + '&utm_source=kakao&utm_medium=brandmsg&utm_campaign=owner_demand&utm_content=' + code;
-    sh.appendRow([code, p.id, '', p.store, "'" + String(p.phone).replace(/\D/g, ''), p.n, when, p.note[0] || '', p.note[1] || '', p.agree, due, '', '', link, 0, '', '', '']);
-    added.push({ store: p.store, due: due, agree: p.agree });
+    sh.appendRow([code, p.id, '', p.store, "'" + String(p.phone).replace(/\D/g, ''), p.n, when, p.note[0] || '', p.note[1] || '', p.agree, due, '', '', link, 0, '', '', '', setting('B36'), '']);
   });
-  return { ok: true, notion: pages.length, added: added };
+  return { ok: true, notion: pages.length };
 }
 
 // 비즈톡 발송 한 건. 요청 모양은 비즈톡 문서대로 설정 B33에 JSON 틀로 적음(코드에 추측해서 넣지 않음)
@@ -1540,7 +1540,7 @@ function dmPreview(code) {
   var c = dmStore(code);
   if (!c) return { ok: false, err: '코드 없음' };
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(DM_TAB), r = sh.getRange(c.row, 1, 1, DM_HEAD.length).getValues()[0];
-  var tpl = setting('B33'), v = { phone: String(r[4]).replace(/\D/g, ''), store: r[3], n: r[5], link: r[13] };
+  var tpl = setting('B33'), v = { phone: String(r[4]).replace(/\D/g, ''), store: r[3], n: r[5], link: r[13], tpl: r[18] || setting('B36') };
   return { ok: true, values: v, body: tpl ? tpl.replace(/\{\{(\w+)\}\}/g, function (m, k) { return String(v[k] == null ? '' : v[k]); }) : '(설정 B33 비어 있음)' };
 }
 
@@ -1553,11 +1553,13 @@ function dmSend(live) {
     var row = i + 2, code = String(r[0]);
     if (!code || r[11] || !(r[10] instanceof Date) || r[10] > now || props.getProperty('DMSENT_' + code)) return;
     if (String(r[9]) !== '동의') { if (!r[12]) { sh.getRange(row, 13).setValue('보류: 메시지 수신 동의 없음'); out.held.push(r[3]); } return; }
+    var tplId = String(r[18] || setting('B36'));
+    if (!tplId) { out.due.push(r[3] + '(메시지 식별자 없음)'); return; }
     if (!live) { out.due.push(r[3]); return; }
     sh.getRange(row, 12).setValue(now); props.setProperty('DMSENT_' + code, Utilities.formatDate(now, 'Asia/Seoul', 'yyyy-MM-dd HH:mm')); SpreadsheetApp.flush();
     var link = shortLinks([r[13]], '수요 안내 브랜드 메시지')[0];
     var res;
-    try { res = bizSend({ phone: String(r[4]).replace(/\D/g, ''), store: r[3], n: r[5], link: link }); } catch (e) { res = { ok: false, err: String(e) }; }
+    try { res = bizSend({ phone: String(r[4]).replace(/\D/g, ''), store: r[3], n: r[5], link: link, tpl: tplId }); } catch (e) { res = { ok: false, err: String(e) }; }
     sh.getRange(row, 13).setValue(res.ok ? '성공 ' + res.http : '실패 ' + (res.http || '') + ' ' + (res.err || res.body || ''));
     (res.ok ? out.sent : out.failed).push(r[3] + (res.ok ? '' : ' (' + (res.err || 'HTTP ' + res.http) + ')'));
   });
@@ -1578,9 +1580,10 @@ function dmJob() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return { ok: false, reason: '이미 도는 중' };
   try {
-    var sy; try { sy = dmSync(); } catch (e) { sy = { ok: false, err: String(e) }; }
+    var sy = { ok: true }; if (setting('B35')) { try { sy = dmSync(); } catch (e) { sy = { ok: false, err: String(e) }; } }
+    var added = dmNewRows();
     var live = setting('B34').toUpperCase() === 'Y', se = dmSend(live), L = ['*[수요 안내 · 브랜드 메시지]*'];
-    if (sy.added && sy.added.length) L.push('발송 예약 ' + sy.added.length + '곳: ' + sy.added.map(function (a) { return a.store + ' ' + md2(a.due) + (a.agree === '동의' ? '' : ' (수신 동의 없음 → 보내지 않음)'); }).join(' / '));
+    if (added.length) L.push('발송 예약 ' + added.length + '곳: ' + added.map(function (a) { return a.store + ' ' + md2(a.due) + ' · ' + (a.tpl || '식별자 미정') + (a.agree === '동의' ? '' : ' (수신 동의 없음 → 보내지 않음)'); }).join(' / '));
     if (se.sent.length) L.push('발송 성공 ' + se.sent.length + '곳: ' + se.sent.join(', '));
     if (se.failed.length) L.push('발송 실패 ' + se.failed.length + '곳: ' + se.failed.join(', ') + ' → 다시 안 보냄, 비즈톡 발송 내역 확인');
     if (se.held.length) L.push('보류 ' + se.held.length + '곳(메시지 수신 동의 없음): ' + se.held.join(', '));
@@ -1589,6 +1592,21 @@ function dmJob() {
     if (L.length > 1) dmSlack(L.join('\n'));
     return { ok: true, sync: sy, send: se, live: live };
   } finally { lock.releaseLock(); }
+}
+
+// 새로 들어온 줄(코드는 있고 「예약 알림」이 빈 줄): 발송 예정이 비면 기준 일시로 채우고, 예약 알림 표시 → 슬랙용 목록
+function dmNewRows() {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(DM_TAB), out = [];
+  if (!sh || sh.getLastRow() < 2) return out;
+  var v = sh.getRange(2, 1, sh.getLastRow() - 1, DM_HEAD.length).getValues();
+  v.forEach(function (r, i) {
+    if (!r[0] || r[19]) return;
+    var due = r[10] instanceof Date ? r[10] : dmSlot(r[6] instanceof Date ? r[6] : new Date());
+    if (!(r[10] instanceof Date)) sh.getRange(i + 2, 11).setValue(due);
+    sh.getRange(i + 2, 20).setValue(new Date());
+    out.push({ store: r[3], due: due, agree: r[9], tpl: r[18] || setting('B36') });
+  });
+  return out;
 }
 
 function installDmTrigger() {   // 편집기에서 한 번만 실행

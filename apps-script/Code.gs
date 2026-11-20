@@ -104,9 +104,9 @@ function doPost(e) {
     var ok = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
     return ContentService.createTextOutput(JSON.stringify(ok ? { ok: true, slack: notifyApply({ store: '테스트매장', nick: '테스트', grp: 's', la: '1', g: '1', src: 'call', w: '1', vid: 'TEST-0001', sid: '', ref: 'utm_content=ltr_rcr_benefit&utm_term=ltr_selftest_b1' }) } : { ok: false, reason: 'token' })).setMimeType(ContentService.MimeType.JSON);
   }
-  if (d.type === 'dm_add' || d.type === 'dm_fire') {   // 수요 안내 메시지: 매장 줄 넣기 · 백오피스 발송 API로 보내기. 비밀번호 = 「설정」 B2
+  if (d.type === 'dm_add' || d.type === 'dm_fire' || d.type === 'dm_schedule') {   // 수요 안내 메시지: 매장 줄 넣기 · 백오피스 발송 API로 보내기. 비밀번호 = 「설정」 B2
     var okD = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
-    return ContentService.createTextOutput(JSON.stringify(!okD ? { ok: false, reason: 'token' } : d.type === 'dm_add' ? dmAdd(d.rows || []) : dmFire(d))).setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify(!okD ? { ok: false, reason: 'token' } : d.type === 'dm_add' ? dmAdd(d.rows || []) : d.type === 'dm_schedule' ? dmSchedule(d) : dmFire(d))).setMimeType(ContentService.MimeType.JSON);
   }
   if (d.type === 'msg_test' || d.type === 'msg_run') {   // 알림톡 시험(uid 한 명에게 견본 값으로) · 지금 한 번 돌리기. 비밀번호 = 「설정」 B2
     var okM = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
@@ -1750,4 +1750,29 @@ function dmFire(d) {
   }
   dmSlack('*[수요 안내 · 브랜드 메시지]*\n발송 접수 ' + out.sent.length + '곳' + (out.failed.length ? ' / 실패 ' + out.failed.length + '곳: ' + out.failed.join(', ') : '') + '\n실제 도착은 백오피스 발송 내역에서 확인');
   return { ok: true, sent: out.sent.length, failed: out.failed };
+}
+
+// 예약 발송: 매장 이름 목록 + 시각(KST 'yyyy-MM-dd HH:mm')을 저장하고 그 시각에 한 번만 도는 트리거를 만듦. 시각이 되면 dmFire(live)로 그 매장들만 보냄
+function dmSchedule(d) {
+  var only = (d.only || []).map(String).filter(String);
+  if (!only.length || !d.at) return { ok: false, err: 'only · at 필요' };
+  var at = Utilities.parseDate(String(d.at), 'Asia/Seoul', 'yyyy-MM-dd HH:mm');
+  if (!(at > new Date())) return { ok: false, err: '지난 시각' };
+  var props = PropertiesService.getScriptProperties();
+  var list = JSON.parse(props.getProperty('DM_SCHEDULE') || '[]');
+  list.push({ at: at.getTime(), only: only });
+  props.setProperty('DM_SCHEDULE', JSON.stringify(list));
+  ScriptApp.newTrigger('dmScheduledFire').timeBased().at(at).create();
+  dmSlack('*[수요 안내 · 브랜드 메시지]*\n발송 예약 ' + only.length + '곳 · ' + md2(at) + ': ' + only.join(', '));
+  return { ok: true, at: Utilities.formatDate(at, 'Asia/Seoul', 'yyyy-MM-dd HH:mm'), stores: only };
+}
+function dmScheduledFire() {
+  var props = PropertiesService.getScriptProperties(), now = Date.now();
+  var list = JSON.parse(props.getProperty('DM_SCHEDULE') || '[]'), keep = [], due = [];
+  list.forEach(function (x) { (x.at <= now + 60000 ? due : keep).push(x); });
+  props.setProperty('DM_SCHEDULE', JSON.stringify(keep));
+  var only = []; due.forEach(function (x) { only = only.concat(x.only); });
+  var res = only.length ? dmFire({ live: true, only: only }) : { ok: true, sent: 0 };
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'dmScheduledFire' && !keep.length) ScriptApp.deleteTrigger(t); });
+  return res;
 }

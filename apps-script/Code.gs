@@ -1711,8 +1711,8 @@ function dmAdd(rows) {
 }
 
 function dmReq(id, store, n, link) {
-  var r = { variables: { title: [], content: [String(store), String(DM_DAYS), String(n)], deep_link: [], replacement_title: [], replacement_content: [],
-    message_addon_element: { pc_link: [link], mobile_link: [link], brand_message_wide_item: { image_link: [link] } } } };
+  var r = { variables: { title: [], content: [String(store)], deep_link: [], replacement_title: [], replacement_content: [],
+    message_addon_element: { pc_link: [link], mobile_link: [link], image_url: [link] } } };   // 이미지 링크 강조 변수 = image_url(백오피스 엑셀 업로드와 같은 칸)
   if (id.indexOf('U:') === 0) r.user_identifier = id.slice(2); else r.non_user_identifier = id.slice(2);
   return r;
 }

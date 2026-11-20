@@ -222,6 +222,7 @@ function doPost(e) {
   var lp = d.c && !isDmCode(d.c) ? letter(d.c) : null;
   var cp = d.c && isDmCode(d.c) ? dmStore(d.c) : null;   // 수요 안내 랜딩(2026-11-20)
   if (cp) { d.store = cp.store; d.sid = cp.sid; d.nick = ''; }
+  else if (d.c && isDmCode(d.c)) return ContentService.createTextOutput(JSON.stringify({ ok: true, test: true })).setMimeType(ContentService.MimeType.JSON);   // 대상 탭에 없는 수요 안내 코드: 편지 탭 · 슬랙과 섞이지 않게 기록하지 않음
   if (lp) { d.t = lp.t; d.nick = lp.nick; d.store = lp.store; d.sid = lp.sid; d.uid = d.uid || lp.uid; } // 점주 기록은 편지코드로 손님 · 매장을 시트 값으로 잇는다
   var p = target(d.t) || targetByUid(d.uid);
   // 링크에 값이 있으면 링크 값을, 없으면 「모집대상」 값을 쓴다

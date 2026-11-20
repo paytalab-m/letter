@@ -366,7 +366,7 @@ ul.dl{list-style:none;margin:0}ul.dl li{position:relative;padding-left:12px}ul.d
 /* 편지코드로 값을 받아 오는 동안 매장명 · 닉네임 자리를 잠깐 가린다 */
 html.ld .store,html.ld .nick,html.ld .due{color:transparent!important;background:#EDE7E2;border-radius:4px}
 
-.said,.stats>div:first-child,.alarm{display:none!important}.stats{display:block!important}.stats>div{width:100%}
+
 </style></head><body><div class="wrap">
 <div class="nav">패스오더 · 사장님 안내</div>
 
@@ -468,7 +468,7 @@ const DATA={store:Q.get('store')||'패스카페',nick:'',n_view:_v,n_req:_r,n_el
 // 요청 손님 카드: 앱 「도입 요청」의 이유 4가지(빠른 픽업 · 적립 · 전화보다 쉬움 · 시간 절약)에서만 고름. 최근 90일 안 날짜, 최신순
 const NAMES=['커피','달콤','민트','하루','소소','봄날','라라','모카','연두','단비','초코','구름'];
 const _jo=w=>{const c=w.charCodeAt(w.length-1)-0xAC00;return c>=0&&c<11172&&c%28?'은':'는'};
-const SAYS=[];
+const SAYS=[[DATA.store+_jo(DATA.store)+' 패스오더 안 되나요?','기다리지 않고 받아 가고 싶어요'],['점심시간엔 줄이 길어서','미리 주문해 두고 싶어요'],['전화로 주문하기가 좀 불편해요'],['미리 결제하고 바로 받아 가고 싶어요'],['적립도 받으면서 주문하고 싶어요'],['출근길에 들러서 바로 받아 가고 싶어요'],['아이 데리고 오면 기다리기 힘들어요','앱으로 미리 시킬 수 있으면 좋겠어요'],['단체 주문할 때 전화로 하기 번거로워요']];
 const AV=['../owner-qr/assets/img/req_av1.png','../owner-qr/assets/img/req_av2.png','../owner-qr/assets/img/req_av3.png','../owner-qr/assets/img/req_av4.png'];
 {
   const today=new Date(); const W='일월화수목금토';

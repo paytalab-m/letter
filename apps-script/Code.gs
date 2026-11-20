@@ -1635,8 +1635,8 @@ function dmAsk(d, cp, row) {
   try { who = whoCalls({ tel: d.tel, c: '', uid: '', sid: cp.sid }); } catch (e) {}
   try { hist = storeHist(cp.sid, cp.store); } catch (e) {}
   var lines = [
-    '*' + (d.test ? '[시험] ' : '') + '[수요 안내] 사장님 문의 · ' + cp.store + (d.edit ? ' (연락처 수정)' : '') + '*',
-    '_편지 문의 아님 · 브랜드 메시지 랜딩에서 남긴 문의_',
+    '*' + (d.test ? '[시험] ' : '') + '전화 문의 · ' + cp.store + (d.edit ? ' (연락처 수정)' : '') + '*',
+    '_브랜드 메시지 랜딩에서 남긴 문의 · 편지 없음_',
     '',
     '*연락처: ' + (tel || '-') + '*',
     '*통화 희망: ' + (d.time || '-') + '*',

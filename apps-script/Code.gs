@@ -104,9 +104,9 @@ function doPost(e) {
     var ok = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
     return ContentService.createTextOutput(JSON.stringify(ok ? { ok: true, slack: notifyApply({ store: '테스트매장', nick: '테스트', grp: 's', la: '1', g: '1', src: 'call', w: '1', vid: 'TEST-0001', sid: '', ref: 'utm_content=ltr_rcr_benefit&utm_term=ltr_selftest_b1' }) } : { ok: false, reason: 'token' })).setMimeType(ContentService.MimeType.JSON);
   }
-  if (d.type === 'dm_add' || d.type === 'dm_fire' || d.type === 'dm_schedule') {   // 수요 안내 메시지: 매장 줄 넣기 · 백오피스 발송 API로 보내기. 비밀번호 = 「설정」 B2
+  if (d.type === 'dm_add' || d.type === 'dm_fire' || d.type === 'dm_schedule' || d.type === 'dm_probe') {   // 수요 안내 메시지: 매장 줄 넣기 · 백오피스 발송 API로 보내기. 비밀번호 = 「설정」 B2
     var okD = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
-    return ContentService.createTextOutput(JSON.stringify(!okD ? { ok: false, reason: 'token' } : d.type === 'dm_add' ? dmAdd(d.rows || []) : d.type === 'dm_schedule' ? dmSchedule(d) : dmFire(d))).setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify(!okD ? { ok: false, reason: 'token' } : d.type === 'dm_add' ? dmAdd(d.rows || []) : d.type === 'dm_schedule' ? dmSchedule(d) : d.type === 'dm_probe' ? dmProbe(d) : dmFire(d))).setMimeType(ContentService.MimeType.JSON);
   }
   if (d.type === 'msg_test' || d.type === 'msg_run') {   // 알림톡 시험(uid 한 명에게 견본 값으로) · 지금 한 번 돌리기. 비밀번호 = 「설정」 B2
     var okM = d.token && d.token === String(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('설정').getRange('B2').getValue());
@@ -1740,16 +1740,29 @@ function dmFire(d) {
   var now = new Date(), links = shortLinks(todo.map(function (t) { return t.link; }), '수요 안내 메시지'), out = { sent: [], failed: [] };
   todo.forEach(function (t) { sh.getRange(t.row, 12).setValue(now); props.setProperty('DMSENT_' + t.code, Utilities.formatDate(now, 'Asia/Seoul', 'yyyy-MM-dd HH:mm')); });
   SpreadsheetApp.flush();
-  for (var i = 0; i < todo.length; i += 100) {
-    var part = todo.slice(i, i + 100), res;
-    try { res = msgPost(code, part.map(function (t, k) { return dmReq(t.id, t.store, t.n, links[i + k]); })); } catch (e) { res = { ok: false, err: String(e) }; }
-    part.forEach(function (t) {
-      sh.getRange(t.row, 13).setValue(res.ok ? '접수 ' + res.http : '실패 ' + (res.http || '') + ' ' + (res.err || res.body || ''));
-      (res.ok ? out.sent : out.failed).push(t.store);
-    });
-  }
+  todo.forEach(function (t, k) { t.short = links[k]; });
+  // 회원(U:)은 B36 메시지, 비회원(N:)은 B39 메시지로 따로 보냄(회원 대상 메시지는 비회원 식별자를 받지 않음 · 2026-11-23)
+  [['U:', code], ['N:', setting('B39')]].forEach(function (g) {
+    var grp = todo.filter(function (t) { return t.id.indexOf(g[0]) === 0; });
+    if (!grp.length) return;
+    if (!g[1]) { grp.forEach(function (t) { sh.getRange(t.row, 13).setValue('실패 비회원 메시지 식별자 없음(설정 B39)'); out.failed.push(t.store); }); return; }
+    for (var i = 0; i < grp.length; i += 100) {
+      var part = grp.slice(i, i + 100), res;
+      try { res = msgPost(g[1], part.map(function (t) { return dmReq(t.id, t.store, t.n, t.short); })); } catch (e) { res = { ok: false, err: String(e) }; }
+      part.forEach(function (t) {
+        sh.getRange(t.row, 13).setValue(res.ok ? '접수 ' + res.http + ' (' + g[1] + ')' : '실패 ' + (res.http || '') + ' ' + (res.err || res.body || ''));
+        (res.ok ? out.sent : out.failed).push(t.store);
+      });
+    }
+  });
   // 슬랙 알림 없음(2026-11-20 요청)
   return { ok: true, sent: out.sent.length, failed: out.failed };
+}
+
+// 설정 점검: 없는 식별자(0000…)로 보내 메시지 코드 · 변수 개수 오류만 확인(받는 사람이 없어 실제로 나가지 않음)
+function dmProbe(d) {
+  var zero = '00000000-0000-0000-0000-000000000000';
+  return { ok: true, res: msgPost(String(d.code), [dmReq((d.kind === 'N' ? 'N:' : 'U:') + zero, '점검', 1, 'paytalab-m.github.io/letter/req/')]) };
 }
 
 // 예약 발송: 매장 이름 목록 + 시각(KST 'yyyy-MM-dd HH:mm')을 저장하고 그 시각에 한 번만 도는 트리거를 만듦. 시각이 되면 dmFire(live)로 그 매장들만 보냄

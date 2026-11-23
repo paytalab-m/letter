@@ -1725,8 +1725,9 @@ function dmFire(d) {
   var v = sh.getRange(2, 1, sh.getLastRow() - 1, DM_HEAD.length).getValues(), props = PropertiesService.getScriptProperties();
   var todo = [];
   v.forEach(function (r, i) {
-    if (!r[0] || r[11] || String(r[9]) !== '동의' || !/^[UN]:/.test(String(r[17])) || props.getProperty('DMSENT_' + r[0])) return;
     if (d.only && d.only.indexOf(String(r[3])) < 0) return;
+    var again = d.resend === true && d.only && /실패/.test(String(r[12]));   // 다시 보내기: 이름을 집어 준 매장 중 결과가 「실패」인 줄만
+    if (!r[0] || (!again && (r[11] || props.getProperty('DMSENT_' + r[0]))) || String(r[9]) !== '동의' || !/^[UN]:/.test(String(r[17]))) return;
     todo.push({ row: i + 2, code: String(r[0]), store: r[3], n: r[5], link: r[13], id: String(r[17]) });
   });
   if (!todo.length) return { ok: true, sent: 0, note: '보낼 줄 없음' };

@@ -488,8 +488,9 @@ const AV=['../owner-qr/assets/img/req_av1.png','../owner-qr/assets/img/req_av2.p
   const nd=new Date(today-between(R,3,30)*864e5); document.getElementById('nickDate').textContent=fmt(nd);
   if(Q.get('say')){document.getElementById('nickSay').textContent=Q.get('say');if(Q.get('sd')){const x=new Date(Q.get('sd'));if(!isNaN(x))document.getElementById('nickDate').textContent=fmt(x);}}
   // 요청 손님: 4명까지 카드, 나머지는 「N명 더」
-  const show=Math.min(8,DATA.n_req,SAYS.length); const used=new Set(); const says=[...SAYS]; let html='';
-  const days=[]; for(let i=0;i<DATA.n_req;i++)days.push(between(R,2,90)); days.sort((a,b)=>a-b);
+  // 카드는 예시(더미)라 요청 손님 수(r)와 상관없이 항상 8장을 롤링(2026-11-24 · r이 1~2인 매장에서 카드가 1~2장만 나와 롤링이 멈춰 있던 문제)
+  const show=Math.min(8,SAYS.length); const used=new Set(); const says=[...SAYS]; let html='';
+  const days=[]; for(let i=0;i<Math.max(DATA.n_req,show);i++)days.push(between(R,2,90)); days.sort((a,b)=>a-b);
   for(let i=0;i<show;i++){
     let ni; do{ni=between(R,0,NAMES.length-1);}while(used.has(ni)); used.add(ni);
     const si=between(R,0,says.length-1); const say=says.splice(si,1)[0];

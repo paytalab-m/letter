@@ -1067,7 +1067,8 @@ function trackArrivals() {
 
 function installTrackTrigger() {   // 편집기에서 한 번만 실행
   ScriptApp.getProjectTriggers().forEach(function (t) { if (/^(trackArrivals|dailyLetterJob|landingWatch)$/.test(t.getHandlerFunction())) ScriptApp.deleteTrigger(t); });
-  [13, 19].forEach(function (h) { ScriptApp.newTrigger('dailyLetterJob').timeBased().everyDays(1).atHour(h).inTimezone('Asia/Seoul').create(); });
+  // 2026-11-25 dailyLetterJob(13 · 19시) 트리거는 다시 만들지 않음(중지 · @119)
+  if (false) [13, 19].forEach(function (h) { ScriptApp.newTrigger('dailyLetterJob').timeBased().everyDays(1).atHour(h).inTimezone('Asia/Seoul').create(); });
   ScriptApp.newTrigger('landingWatch').timeBased().everyMinutes(1).create();   // #00랜딩문의알림 새 문의 확인(2026-10-29 · 2026-11-19 5분 → 1분)
 }
 
@@ -1243,6 +1244,11 @@ function landingWatch() {
       ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'landingWatch') ScriptApp.deleteTrigger(t); });
       ScriptApp.newTrigger('landingWatch').timeBased().everyMinutes(1).create();
       pp.setProperty('LW_EVERY', '1');
+    }
+    // 2026-11-25 편지 도착 · 알림톡 하루 두 번 실행(dailyLetterJob) 중지: 편지가 다 도착했고 알림톡도 꺼서 0통 알림만 남음 → 처음 한 번 그 트리거를 지움
+    if (pp.getProperty('DLJ_OFF') !== '1') {
+      ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'dailyLetterJob') ScriptApp.deleteTrigger(t); });
+      pp.setProperty('DLJ_OFF', '1');
     }
     return landingWatchRun();
   } finally { if (lk) lk.releaseLock(); }

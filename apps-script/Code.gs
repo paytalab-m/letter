@@ -1154,7 +1154,8 @@ var BRANDS = [
   ['요거프레소', ['요거프레소']], ['해쉬커피', ['해쉬커피']], ['하이오커피', ['하이오커피']], ['백억커피', ['백억커피']],
   ['커피빈', ['커피빈', 'coffeebean']], ['폴바셋', ['폴바셋', 'paulbassett']], ['탐앤탐스', ['탐앤탐스', 'tomntoms']], ['파스쿠찌', ['파스쿠찌', 'pascucci']],
   ['바나프레소', ['바나프레소']], ['더리터', ['더리터']], ['쥬씨', ['쥬씨']], ['카페일리터', ['카페일리터']], ['천씨씨커피', ['천씨씨커피']],
-  ['슈퍼사이즈커피', ['슈퍼사이즈커피']], ['팔공티', ['팔공티']], ['와플대학', ['와플대학']], ['커피나무', ['커피나무']], ['달콤커피', ['달콤커피']]
+  ['슈퍼사이즈커피', ['슈퍼사이즈커피']], ['팔공티', ['팔공티']], ['와플대학', ['와플대학']], ['커피나무', ['커피나무']], ['달콤커피', ['달콤커피']],
+  ['카페051', ['카페051', '051카페']]   // 2026-11-26: 「051카페 대구서부정류장점」 문의가 60점에 그쳐 편지 댓글이 빠짐
 ];
 function nameParts(s) {   // 「메가 MGC 커피 부평점」 → { brand: '메가', br: '부평' } · 브랜드 못 잡으면 brand '' · br = 커피 · 카페 낱말과 끝 「점」 뺀 나머지
   var n = normName(s), brand = '', rest = n;
@@ -1179,6 +1180,8 @@ function matchDelivered(name, phone, stores, region) {
     if (!brandClash && n && m) {
       var sh = n.length <= m.length ? n : m, lo = sh === n ? m : n;
       if (n === m) put(95, '매장 이름');
+      // 「커피 · 카페」 낱말 위치만 다르고 나머지가 같으면 같은 매장(예: 051카페 대구서부정류장점 = 카페051 대구서부정류장점 · 2026-11-26)
+      if (!q.brand && !p.brand && q.br && q.br === p.br && q.br.length >= 4) put(90, '매장 이름(카페 · 커피 위치 다름)');
       if (q.brand && q.brand === p.brand && q.br && q.br === p.br && q.br.length >= 2) put(90, '매장 이름(브랜드 표기 다름)');
       if (sh.length >= 6 && /점$/.test(sh) && lo.indexOf(sh) >= 0) put(85, '매장 이름');
       if (q.brand && q.brand === p.brand && q.br && p.br) {
@@ -1189,7 +1192,7 @@ function matchDelivered(name, phone, stores, region) {
         else if (bs.length >= 3 && dice(q.br, p.br) >= 0.6) put(60, '비슷한 지점명(확인 필요)');
       }
       if (n.length >= 6 && m.length >= 6 && n.slice(0, 2) === m.slice(0, 2) && dice(n, m) >= 0.8) put(75, '비슷한 매장 이름');
-      if (n.slice(0, 2) === m.slice(0, 2) && /점$/.test(n) && sameTail(n, m) >= 5) put(75, '지점명');
+      if (n.slice(0, 2) === m.slice(0, 2) && /점$/.test(n) && sameTail(n, m) >= 6) put(75, '지점명');   // 5→6(2026-11-26): 「가양아노비즈타워점」이 「광주첨단비즈타워점」과 「비즈타워점」 5글자로 잘못 맞음
       if (!q.brand && !p.brand && q.br.length >= 3 && p.br.length >= 3 && dice(q.br, p.br) >= 0.7) put(60, '비슷한 매장 이름(확인 필요)');
     }
     // 문의 「지역」에 매장 도로명이 들어 있으면 이름 점수에 +5(주소 · 연락처로 잡힌 건 그대로)
@@ -1270,7 +1273,15 @@ function landingWatchRun() {
     if (!LL.isSheetHidden()) LL.hideSheet();
     LL.appendRow([new Date(Number(m.ts) * 1000), q.name, "'" + phoneHash(q.phone), "'" + m.ts]);
     var mt = matchDelivered(q.name, q.phone, stores, q.region);
-    if (mt && !mt.sure) log.appendRow([new Date(), new Date(Number(m.ts) * 1000), q.name, mt.how + ' (' + mt.score + '점)', mt.store.name, '', '확인 필요(댓글 안 함)']);
+    if (mt && !mt.sure) {
+      log.appendRow([new Date(), new Date(Number(m.ts) * 1000), q.name, mt.how + ' (' + mt.score + '점)', mt.store.name, '', '확인 필요(댓글 안 함)']);
+      // 놓치지 않게: 「확인 필요」도 #편지-신청자-알림에 마케팅 봇(설정 B3 웹후크)으로 알림 → 사람이 보고 같은 매장이면 맥락 댓글(2026-11-26)
+      try {
+        var wu = slackUrl('SLACK_WEBHOOK_APPLY', 'B3');
+        if (wu) UrlFetchApp.fetch(wu, { method: 'post', contentType: 'application/json', muteHttpExceptions: true, payload: JSON.stringify({ text:
+          '*랜딩 문의 짝 맞추기 · 확인 필요*\n문의 「' + q.name + '」 ↔ ' + (mt.store.dm ? '수요 안내 대상' : '편지 매장') + ' 「' + mt.store.name + '」 · ' + mt.how + ' (' + mt.score + '점)\n같은 매장이면 그 문의에 맥락 댓글이 필요해요 · https://paytalab.slack.com/archives/' + LANDING_CH + '/p' + String(m.ts).replace('.', '') }) });
+      } catch (e) {}
+    }
     if (mt && mt.sure) {
       var text = mt.store.dm ? dmComment(mt.store) : landingComment(mt.store), sent = '';
       if (live) { var r = slackApi('chat.postMessage', { channel: LANDING_CH, thread_ts: m.ts, text: text }); sent = r.ok ? 'Y' : '실패: ' + r.error; }

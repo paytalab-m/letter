@@ -1212,6 +1212,7 @@ function landingComment(s) {
     : '패써 ' + hand.map(function (x) { return '「' + x.nick + '」님(' + md(x.day) + ')'; }).join(', ') + ', ' + hand.length + '분이 편지를 건넨 매장이에요.';
   var lines = ['✉️ *[편지]* 이 매장은 ' + who];
   if (s.qr) lines.push('사장님은 ' + md(s.qr) + '에 편지 속 QR로 손님 요청 페이지를 열어 보셨어요.');
+  if (s.bm) lines.push('사장님께 ' + (s.bm.sent ? md(s.bm.sent) + '에 ' : (s.bm.rawSent ? md(s.bm.rawSent) + '에 ' : '')) + '손님 수요 브랜드 메시지(편지 안내 페이지 링크)도 보냈어요' + (s.bm.views ? ' · 페이지 접속 ' + s.bm.views + '번' : '') + '.');
   lines.push('통화하실 때 "손님이 전해 드린 편지 보셨죠?"로 시작하시면 이야기가 쉬워요. 히스토리 참고 부탁드려요.');
   lines.push(LANDING_TAG);
   return lines.join('\n');
@@ -1681,8 +1682,11 @@ function dmStores(out) {
     var code = String(r[0] || ''), name = String(r[3] || '');
     if (!code || !name) return;
     var o = { dm: true, code: code, sid: String(r[2] || ''), name: name, hand: [], qr: r[15] instanceof Date ? r[15] : null, tels: {},
-      sent: r[11] instanceof Date ? r[11] : null, result: String(r[12] || ''), n: r[5], views: Number(r[14]) || 0 };
+      sent: r[11] instanceof Date ? r[11] : null, rawSent: String(r[11] || ''), result: String(r[12] || ''), n: r[5], views: Number(r[14]) || 0 };
     var h = phoneHash(r[4]); if (h) o.tels[h] = true;
+    // 편지를 건넨 매장(편지 랜딩으로 브랜드 메시지를 받은 곳)은 편지 매장 한 곳으로 합침: 따로 두면 같은 이름이 두 번 잡혀 동점 → 「확인 필요」로 댓글이 안 달림(2026-11-26)
+    var lt = (o.sid && out[o.sid]) || out[normName(name)];
+    if (lt && !lt.dm) { lt.bm = o; lt.tels = lt.tels || {}; Object.keys(o.tels).forEach(function (t) { lt.tels[t] = true; }); return; }
     out['dm:' + (o.sid || code)] = o;
   });
   return out;
@@ -1792,3 +1796,5 @@ function dmScheduledFire() {
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'dmScheduledFire' && !keep.length) ScriptApp.deleteTrigger(t); });
   return res;
 }
+
+// @123: 랜딩문의 댓글 — 편지 랜딩 브랜드 메시지 매장은 편지 매장과 합침(dmStores)
